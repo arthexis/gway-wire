@@ -1,0 +1,16 @@
+# Trusted live-gateway integration recipe.
+# Parameters: fqdn, cert_email
+
+# Exercise self-upgrade and resume under the newly installed runtime.
+upgrade gway --force
+reload
+
+# Refresh the managed gateway projects through GWAY itself.
+upgrade wire --force
+install web
+
+# Confirm the managed Web surface is available after refresh.
+web site
+
+# Keep deployment as the final result so CI can assert its success mapping.
+wire server deploy --fqdn [fqdn] --cert-email [cert_email]

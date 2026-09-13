@@ -4,13 +4,20 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      recipe:
+        description: Checked-in recipe under recipes/ to execute on the live gateway
+        required: false
+        default: recipes/ubuntu22-live.rx
+        type: string
 
 permissions:
   contents: read
 
 # This workflow intentionally never runs for pull_request. The self-hosted runner
 # is the live Ubuntu 22 gateway, so only trusted main commits from the repository
-# owner may execute here.
+# owner may execute here. A manual run may select only a tracked .rx file under
+# recipes/; it cannot supply arbitrary shell commands or paths outside that tree.
 # Only the newest live run matters; replace any stale queued/in-progress run so
 # manual retries and fresh main pushes can reach the single gateway runner.
 concurrency:
@@ -20,11 +27,15 @@ concurrency:
 jobs:
   live:
     if: github.actor == 'arthexis'
-    name: Live gateway readiness
+    name: Live gateway recipe
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 15
 
     steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
       - name: Verify trusted Ubuntu 22 gateway
         shell: bash
         run: |
@@ -36,70 +47,48 @@ jobs:
           python3 --version
           sudo -n true
 
-      - name: Upgrade GWAY from main
+      - name: Select trusted RX recipe
+        id: recipe
+        shell: bash
+        env:
+          REQUESTED_RECIPE: ${{ github.event.inputs.recipe }}
+        run: |
+          set -euo pipefail
+          requested="${REQUESTED_RECIPE:-recipes/ubuntu22-live.rx}"
+          validated="$(bash .github/scripts/validate-recipe-path.sh "${requested}")"
+          printf 'path=%s\n' "${validated}" >> "${GITHUB_OUTPUT}"
+
+      # Keep a minimal bootstrap outside the recipe so a gateway that still has a
+      # pre-Chunk-9 GWAY can understand explicit recipe parameters. The recipe
+      # deliberately upgrades GWAY again and executes `reload` to exercise the
+      # real checkpoint/resume path under the current code.
+      - name: Bootstrap current GWAY
         shell: bash
         run: |
           set -euo pipefail
           sudo -n gway upgrade gway --force
 
-      - name: Upgrade Wire from main
+      - name: Execute trusted RX recipe
         shell: bash
         run: |
           set -euo pipefail
-          sudo -n gway upgrade wire --force
-
-      # Keep Web last so its managed checkout is current as well as the dependency
-      # copy refreshed inside Wire's own environment.
-      - name: Upgrade Web from main
-        shell: bash
-        run: |
-          set -euo pipefail
-          if sudo -n gway web --help >/dev/null 2>&1; then
-            sudo -n gway upgrade web --force
-          else
-            sudo -n gway install web
-          fi
-
-      - name: Diagnose managed Web runtime
-        shell: bash
-        run: |
-          set -euo pipefail
-          GWAY_BIN="$(sudo -n sh -c 'command -v gway')"
-          echo "gway executable: ${GWAY_BIN}"
-          echo "gway wrapper header:"
-          sudo -n sed -n '1,20p' "${GWAY_BIN}"
-          echo "managed Web surface:"
-          sudo -n gway web --help
-          echo "configured Web sites:"
-          sudo -n gway web site
-
-      - name: Deploy live enrollment endpoint
-        shell: bash
-        run: |
-          set -euo pipefail
-          result="$(sudo -n gway --json wire server deploy \
+          result="$(sudo -n gway --json recipe "${{ steps.recipe.outputs.path }}" \
             --fqdn register.arthexis.com \
             --cert-email tecnologia@gelectriic.com)"
           printf '%s\n' "${result}"
           printf '%s\n' "${result}" | grep -Eq '"success"[[:space:]]*:[[:space:]]*true'
 
-      - name: Verify live readiness and public health
+      # Raw host/network assertions stay in Actions rather than growing shell or
+      # conditional semantics inside the .rx language.
+      - name: Verify live public health
         shell: bash
         run: |
-          set -uo pipefail
-          status=0
-
-          sudo -n gway wire server check --fqdn register.arthexis.com || status=$?
-
-          if ! curl \
+          set -euo pipefail
+          sudo -n gway wire server check --fqdn register.arthexis.com
+          curl \
             --fail \
             --show-error \
             --silent \
             --max-time 10 \
-            https://register.arthexis.com/health; then
-            status=1
-          else
-            echo
-          fi
-
-          exit "${status}"
+            https://register.arthexis.com/health
+          echo
