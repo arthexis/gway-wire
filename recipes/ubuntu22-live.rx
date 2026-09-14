@@ -6,8 +6,8 @@ upgrade gway --force
 reload
 
 # Refresh the managed gateway projects through GWAY itself.
-upgrade wire --force
-upgrade web --force
+upgrade wire
+upgrade web
 
 # Confirm the managed Web surface is available after refresh.
 web site
