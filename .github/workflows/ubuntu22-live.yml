@@ -78,6 +78,28 @@ jobs:
           printf '%s\n' "${result}"
           python3 -c 'import json, sys; data = json.load(sys.stdin); print("recipe success=%r" % (data.get("success"),), file=sys.stderr); sys.exit(0 if data.get("success") is True else 1)' <<<"${result}"
 
+      - name: Verify managed checkout revisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          for checkout in \
+            /var/lib/gway/projects/arthexis/gway-wire \
+            /var/lib/gway/projects/arthexis/gway-web
+          do
+            sudo -n git -C "${checkout}" rev-parse --is-inside-work-tree >/dev/null
+            head="$(sudo -n git -C "${checkout}" rev-parse HEAD)"
+            upstream="$(sudo -n git -C "${checkout}" ls-remote --exit-code origin refs/heads/main | awk '{print $1}')"
+            printf '%s HEAD=%s origin/main=%s\n' "${checkout}" "${head}" "${upstream}"
+            test -n "${upstream}"
+            test "${head}" = "${upstream}"
+
+            status="$(sudo -n git -C "${checkout}" status --porcelain)"
+            if [[ -n "${status}" ]]; then
+              printf 'managed checkout is dirty: %s\n%s\n' "${checkout}" "${status}" >&2
+              exit 1
+            fi
+          done
+
       # Raw host/network assertions stay in Actions rather than growing shell or
       # conditional semantics inside the .rx language.
       - name: Verify live public health

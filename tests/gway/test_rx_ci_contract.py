@@ -57,6 +57,15 @@ class RxCiContractTests(unittest.TestCase):
         self.assertNotIn("grep -Eq", text)
         self.assertIn("gway --json wire server check", text)
 
+    def test_live_workflow_verifies_managed_checkout_provenance(self) -> None:
+        text = WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("/var/lib/gway/projects/arthexis/gway-wire", text)
+        self.assertIn("/var/lib/gway/projects/arthexis/gway-web", text)
+        self.assertIn("ls-remote --exit-code origin refs/heads/main", text)
+        self.assertIn('test "${head}" = "${upstream}"', text)
+        self.assertIn("status --porcelain", text)
+        self.assertIn("managed checkout is dirty", text)
+
     def test_recipe_path_validator_accepts_tracked_default(self) -> None:
         result = subprocess.run(
             ["bash", str(VALIDATOR), "recipes/ubuntu22-live.rx"],
