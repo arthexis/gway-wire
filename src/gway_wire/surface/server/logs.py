@@ -18,6 +18,7 @@ from gway_wire.surface.server import (
 )
 
 _DEFAULT_UPSTREAM = "http://127.0.0.1:8040"
+_DEFAULT_EXPOSURE_TIMEOUT = 300.0
 
 
 def expose(
@@ -30,6 +31,8 @@ def expose(
     provider: str | None = None,
     public_address: str | None = None,
     cert_email: str | None = None,
+    timeout: float = _DEFAULT_EXPOSURE_TIMEOUT,
+    dns_wait_timeout: float | None = None,
     env_file: Path = _DEFAULT_ENV_FILE,
     protocol: str = DEFAULT_PROTOCOL,
 ) -> dict[str, object]:
@@ -40,6 +43,7 @@ def expose(
     selected_provider = _selected_provider(values, dns_provider, provider)
     address = _public_address(values, public_address)
     email = cert_email or values.get("GWAY_CERTBOT_EMAIL") or os.environ.get("GWAY_CERTBOT_EMAIL")
+    resolved_dns_wait_timeout = timeout if dns_wait_timeout is None else dns_wait_timeout
 
     with _web_environment(values):
         return exposure_ensure(
@@ -52,6 +56,7 @@ def expose(
             public_address=address,
             email=email,
             agree_tos=True,
+            dns_wait_timeout=resolved_dns_wait_timeout,
         )
 
 
