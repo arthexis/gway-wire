@@ -18,6 +18,8 @@ permissions:
 # is the live Ubuntu 22 gateway, so only trusted main commits from the repository
 # owner may execute here. A manual run may select only a tracked .rx file under
 # recipes/; it cannot supply arbitrary shell commands or paths outside that tree.
+# Manual dispatches exercise the same full integration path as a push to main,
+# including refreshing the persistent Arthexis Watchtower after baseline checks.
 # Only the newest live run matters; replace any stale queued/in-progress run so
 # manual retries and fresh main pushes can reach the single gateway runner.
 concurrency:
@@ -117,11 +119,9 @@ jobs:
             https://register.arthexis.com/health
           echo
 
-      # A normal main push first proves the gateway baseline above, then refreshes
-      # the persistent Arthexis integration instance. Manual recipe dispatches are
-      # intentionally isolated from this mutation.
+      # Both a normal main push and a manual dispatch first prove the gateway
+      # baseline above, then refresh the persistent Arthexis integration instance.
       - name: Bootstrap persistent Arthexis Watchtower
-        if: github.event_name == 'push'
         shell: bash
         run: |
           set -euo pipefail
