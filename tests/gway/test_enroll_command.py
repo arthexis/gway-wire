@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import subprocess
 import unittest
 from pathlib import Path
@@ -13,7 +14,7 @@ class GwayEnrollCommandTests(unittest.TestCase):
         "gway_wireguard.gway._client_installer", return_value=Path("/repo/install.sh")
     )
     @patch("gway_wireguard.gway.subprocess.run")
-    def test_enroll_uses_arthexis_default_without_cwd(self, run, _installer) -> None:
+    def test_enroll_exposes_configurable_sigil_default(self, run, _installer) -> None:
         run.return_value = subprocess.CompletedProcess(
             ["bash", "/repo/install.sh"],
             0,
@@ -26,6 +27,10 @@ class GwayEnrollCommandTests(unittest.TestCase):
         self.assertTrue(result["success"])
         self.assertEqual(result["exit_code"], 0)
         self.assertEqual(result["output"], "configured")
+        self.assertEqual(
+            inspect.signature(enroll).parameters["enroll_url"].default,
+            "[GWAY_WIRE_ENROLL_URL]",
+        )
         run.assert_called_once_with(
             [
                 "bash",
@@ -33,7 +38,7 @@ class GwayEnrollCommandTests(unittest.TestCase):
                 "--token-file",
                 "/root/gway-enrollment.token",
                 "--enroll-url",
-                "https://register.arthexis.com/v1/enroll",
+                "[GWAY_WIRE_ENROLL_URL]",
             ],
             check=False,
             capture_output=True,
