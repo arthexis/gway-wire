@@ -76,7 +76,7 @@ jobs:
             --fqdn register.arthexis.com \
             --cert-email tecnologia@gelectriic.com)"
           printf '%s\n' "${result}"
-          printf '%s\n' "${result}" | grep -Eq '"success"[[:space:]]*:[[:space:]]*true'
+          python3 -c 'import json, sys; data = json.load(sys.stdin); print("recipe success=%r" % (data.get("success"),), file=sys.stderr); sys.exit(0 if data.get("success") is True else 1)' <<<"${result}"
 
       # Raw host/network assertions stay in Actions rather than growing shell or
       # conditional semantics inside the .rx language.
@@ -84,7 +84,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo -n gway wire server check --fqdn register.arthexis.com
+          readiness="$(sudo -n gway --json wire server check --fqdn register.arthexis.com)"
+          printf '%s\n' "${readiness}"
+          python3 -c 'import json, sys; data = json.load(sys.stdin); ok = data.get("ok") is True and data.get("ready") is True; print("readiness ok=%r ready=%r" % (data.get("ok"), data.get("ready")), file=sys.stderr); sys.exit(0 if ok else 1)' <<<"${readiness}"
           curl \
             --fail \
             --show-error \
