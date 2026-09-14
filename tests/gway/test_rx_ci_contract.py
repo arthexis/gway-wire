@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 RECIPE = ROOT / "recipes" / "ubuntu22-live.rx"
+ARTHEXIS_BOOTSTRAP_RECIPE = ROOT / "recipes" / "arthexis-bootstrap.rx"
 WORKFLOW = ROOT / ".github" / "workflows" / "ubuntu22-live.yml"
 VALIDATOR = ROOT / ".github" / "scripts" / "validate-recipe-path.sh"
 
@@ -34,6 +35,26 @@ class RxCiContractTests(unittest.TestCase):
             statements[-1],
             "wire server deploy --fqdn [fqdn] --cert-email [cert_email]",
         )
+
+    def test_arthexis_bootstrap_recipe_is_persistent_and_health_checked(self) -> None:
+        self.assertTrue(ARTHEXIS_BOOTSTRAP_RECIPE.is_file())
+        statements = [
+            line.strip()
+            for line in ARTHEXIS_BOOTSTRAP_RECIPE.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+        for statement in statements:
+            self.assertTrue(shlex.split(statement))
+
+        self.assertEqual(
+            statements,
+            [
+                "install arthexis --service --role [role|Terminal]",
+                "arthexis status --json",
+                "arthexis good",
+            ],
+        )
+        self.assertFalse(any("uninstall" in statement for statement in statements))
 
     def test_live_workflow_executes_checked_in_recipe_directly(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")
@@ -76,6 +97,17 @@ class RxCiContractTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), "recipes/ubuntu22-live.rx")
+
+    def test_recipe_path_validator_accepts_tracked_arthexis_bootstrap(self) -> None:
+        result = subprocess.run(
+            ["bash", str(VALIDATOR), "recipes/arthexis-bootstrap.rx"],
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "recipes/arthexis-bootstrap.rx")
 
     def test_recipe_path_validator_rejects_untrusted_paths(self) -> None:
         for candidate in (
