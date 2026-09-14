@@ -77,6 +77,13 @@ class RxCiContractTests(unittest.TestCase):
         self.assertNotIn("gway upgrade web --force", text)
         self.assertIn("sudo -n gway upgrade web", text)
 
+    def test_live_workflow_uses_explicit_log_dns(self) -> None:
+        text = WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("GWAY_LOG_DESTINATION: https://logs.arthexis.com", text)
+        self.assertIn("--fqdn logs.arthexis.com", text)
+        self.assertIn("--dns-provider godaddy", text)
+        self.assertNotIn("logs.register.arthexis.com", text)
+
     def test_live_workflow_primes_log_consumers_before_recipe(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")
         log_service = text.index("- name: Bootstrap live GWAY log service")
