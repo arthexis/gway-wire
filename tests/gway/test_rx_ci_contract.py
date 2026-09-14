@@ -26,7 +26,7 @@ class RxCiContractTests(unittest.TestCase):
         self.assertEqual(statements[0], "upgrade gway --force")
         self.assertEqual(statements[1], "reload")
         self.assertIn("upgrade wire --force", statements)
-        self.assertIn("install web", statements)
+        self.assertIn("upgrade web --force", statements)
         self.assertIn("web site", statements)
         self.assertEqual(
             statements[-1],
