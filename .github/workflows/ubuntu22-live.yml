@@ -184,6 +184,7 @@ jobs:
           set -euo pipefail
           result="$(sudo -n gway --json install arthexis --service --role Watchtower)"
           printf '%s\n' "${result}"
+          python3 -c 'import json, sys; data = json.load(sys.stdin); print("arthexis install success=%r" % (data.get("success"),), file=sys.stderr); sys.exit(0 if data.get("success") is True else 1)' <<<"${result}"
           sudo -n gway arthexis status --json
           sudo -n gway arthexis good
 
