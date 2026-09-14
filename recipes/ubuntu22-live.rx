@@ -1,5 +1,10 @@
 # Trusted live-gateway integration recipe.
-# Parameters: fqdn, cert_email
+# Parameters: fqdn, cert_email, log_destination
+
+# Start publishing before any upgrade/reload operation that could hang. GWAY
+# obtains/reuses the same-host ingest credential through the local Web service;
+# the recipe only declares the applications that consume the logger.
+log --tags ci,ubuntu22 --to [log_destination] --consumers wire,arthexis
 
 # Exercise self-upgrade and resume under the newly installed runtime.
 upgrade gway --force
