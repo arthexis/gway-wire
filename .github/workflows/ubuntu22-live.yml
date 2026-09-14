@@ -116,3 +116,16 @@ jobs:
             --max-time 10 \
             https://register.arthexis.com/health
           echo
+
+      # A normal main push first proves the gateway baseline above, then refreshes
+      # the persistent Arthexis integration instance. Manual recipe dispatches are
+      # intentionally isolated from this mutation.
+      - name: Bootstrap persistent Arthexis Watchtower
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          recipe="$(bash .github/scripts/validate-recipe-path.sh recipes/arthexis-bootstrap.rx)"
+          result="$(sudo -n gway --json recipe "${recipe}" --role Watchtower)"
+          printf '%s\n' "${result}"
+          python3 -c 'import json, sys; data = json.load(sys.stdin); print("arthexis bootstrap success=%r" % (data.get("success"),), file=sys.stderr); sys.exit(0 if data.get("success") is True else 1)' <<<"${result}"
