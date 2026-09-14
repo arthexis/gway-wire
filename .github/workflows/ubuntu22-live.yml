@@ -34,7 +34,7 @@ jobs:
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 25
     env:
-      GWAY_LOG_DESTINATION: https://logs.register.arthexis.com
+      GWAY_LOG_DESTINATION: https://logs.arthexis.com
       GWAY_LOG_READ_TOKEN: ${{ secrets.GWAY_LOG_READ_TOKEN }}
       GATEWAY_LOG_RUN_ID: gateway-${{ github.run_id }}-${{ github.run_attempt }}
       WATCHTOWER_LOG_RUN_ID: watchtower-${{ github.run_id }}-${{ github.run_attempt }}
@@ -86,7 +86,8 @@ jobs:
           sudo -n gway upgrade web
           sudo -n env GWAY_SERVICE=logs gway service install web --user root
           exposure="$(sudo -n gway --json wire server logs expose \
-            --fqdn logs.register.arthexis.com \
+            --fqdn logs.arthexis.com \
+            --dns-provider godaddy \
             --cert-email tecnologia@gelectriic.com)"
           printf '%s\n' "${exposure}"
           python3 -c 'import json, sys; data = json.load(sys.stdin); sys.exit(0 if data.get("success") is True else 1)' <<<"${exposure}"
