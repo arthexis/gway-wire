@@ -127,6 +127,7 @@ jobs:
             >/dev/null
 
       - name: Execute trusted RX recipe
+        timeout-minutes: 8
         shell: bash
         run: |
           set -euo pipefail
@@ -196,6 +197,7 @@ jobs:
           echo
 
       - name: Bootstrap persistent Arthexis Watchtower
+        timeout-minutes: 6
         shell: bash
         run: |
           set -euo pipefail
