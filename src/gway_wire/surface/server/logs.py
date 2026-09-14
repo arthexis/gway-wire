@@ -1,0 +1,82 @@
+"""Public exposure helpers for the authenticated GWAY log service."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from gway_web import exposure_check, exposure_ensure
+
+from gway_wire.gway.protocols import DEFAULT_PROTOCOL, require_protocol
+from gway_wire.surface.server import (
+    _DEFAULT_ENV_FILE,
+    _one_fqdn,
+    _public_address,
+    _selected_provider,
+    _values,
+    _web_environment,
+)
+
+_DEFAULT_UPSTREAM = "http://127.0.0.1:8040"
+
+
+def expose(
+    *name: str,
+    fqdn: str | None = None,
+    domain: str | None = None,
+    upstream: str = _DEFAULT_UPSTREAM,
+    health_path: str = "/health",
+    dns_provider: str | None = None,
+    provider: str | None = None,
+    public_address: str | None = None,
+    cert_email: str | None = None,
+    env_file: Path = _DEFAULT_ENV_FILE,
+    protocol: str = DEFAULT_PROTOCOL,
+) -> dict[str, object]:
+    """Expose the loopback GWAY log service at one exact HTTPS FQDN."""
+    require_protocol(protocol)
+    target = _one_fqdn(name, fqdn=fqdn, domain=domain)
+    values = _values(env_file)
+    selected_provider = _selected_provider(values, dns_provider, provider)
+    address = _public_address(values, public_address)
+    email = cert_email or values.get("GWAY_CERTBOT_EMAIL") or os.environ.get("GWAY_CERTBOT_EMAIL")
+
+    with _web_environment(values):
+        return exposure_ensure(
+            fqdn=target,
+            upstream=upstream,
+            health_path=health_path,
+            certbot=True,
+            dns_provider=selected_provider,
+            dns_zone=values.get("GWAY_BASE_DOMAIN") or None,
+            public_address=address,
+            email=email,
+            agree_tos=True,
+        )
+
+
+def check(
+    *name: str,
+    fqdn: str | None = None,
+    domain: str | None = None,
+    dns_provider: str | None = None,
+    provider: str | None = None,
+    public_address: str | None = None,
+    env_file: Path = _DEFAULT_ENV_FILE,
+    timeout: float = 5.0,
+    protocol: str = DEFAULT_PROTOCOL,
+) -> dict[str, object]:
+    """Check DNS, TLS, Nginx, and public health for the log-service FQDN."""
+    require_protocol(protocol)
+    target = _one_fqdn(name, fqdn=fqdn, domain=domain)
+    values = _values(env_file)
+    selected_provider = _selected_provider(values, dns_provider, provider)
+    address = _public_address(values, public_address)
+    with _web_environment(values):
+        return exposure_check(
+            fqdn=target,
+            dns_provider=selected_provider,
+            dns_zone=values.get("GWAY_BASE_DOMAIN") or None,
+            public_address=address,
+            timeout=timeout,
+        )
