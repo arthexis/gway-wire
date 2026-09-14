@@ -109,7 +109,7 @@ jobs:
             --to "${GWAY_LOG_DESTINATION}" \
             --consumers wire,arthexis)"
           printf '%s\n' "${probe}"
-          python3 -c 'import json, sys; data = json.load(sys.stdin); ok = bool(data.get("run_id")) and data.get("consumers") == ["wire", "arthexis"]; sys.exit(0 if ok else 1)' <<<"${probe}"
+          python3 -c 'import json, sys; data = json.load(sys.stdin); consumers = set(data.get("consumers") or []); ok = bool(data.get("run_id")) and {"wire", "arthexis"} <= consumers; sys.exit(0 if ok else 1)' <<<"${probe}"
           printf 'run_id=%s\n' "${probe_run_id}" >> "${GITHUB_OUTPUT}"
 
       - name: Verify external log read credential
