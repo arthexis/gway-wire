@@ -2,7 +2,6 @@ name: Ubuntu 22 Live Integration
 
 on:
   push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       recipe:
@@ -15,13 +14,13 @@ permissions:
   contents: read
 
 # This workflow intentionally never runs for pull_request. The self-hosted runner
-# is the live Ubuntu 22 gateway, so only trusted main commits from the repository
-# owner may execute here. A manual run may select only a tracked .rx file under
+# is the live Ubuntu 22 gateway, so only trusted pushes from the repository owner
+# may execute here. A manual run may select only a tracked .rx file under
 # recipes/; it cannot supply arbitrary shell commands or paths outside that tree.
-# Manual dispatches exercise the same full integration path as a push to main,
+# Manual dispatches exercise the same full integration path as a push,
 # including refreshing the persistent Arthexis Watchtower after baseline checks.
 # Only the newest live run matters; replace any stale queued/in-progress run so
-# manual retries and fresh main pushes can reach the single gateway runner.
+# manual retries and fresh pushes can reach the single gateway runner.
 concurrency:
   group: ubuntu22-live-gateway
   cancel-in-progress: true
@@ -119,8 +118,6 @@ jobs:
             https://register.arthexis.com/health
           echo
 
-      # Both a normal main push and a manual dispatch first prove the gateway
-      # baseline above, then refresh the persistent Arthexis integration instance.
       - name: Bootstrap persistent Arthexis Watchtower
         shell: bash
         run: |
