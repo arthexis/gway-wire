@@ -33,6 +33,8 @@ def expose(
     cert_email: str | None = None,
     timeout: float = _DEFAULT_EXPOSURE_TIMEOUT,
     dns_wait_timeout: float | None = None,
+    rollback: bool = True,
+    dns_rollback: bool = True,
     env_file: Path = _DEFAULT_ENV_FILE,
     protocol: str = DEFAULT_PROTOCOL,
 ) -> dict[str, object]:
@@ -57,6 +59,8 @@ def expose(
             email=email,
             agree_tos=True,
             dns_wait_timeout=resolved_dns_wait_timeout,
+            rollback=rollback,
+            dns_rollback=dns_rollback,
         )
 
 
