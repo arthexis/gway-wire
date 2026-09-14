@@ -128,7 +128,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo -n env GWAY_SERVICE=logs gway service install web --user root
+          sudo -n env \
+            GWAY_SERVICE=logs \
+            GWAY_LOG_INGEST_TOKEN="${GWAY_LOG_INGEST_TOKEN}" \
+            GWAY_LOG_READ_TOKEN="${GWAY_LOG_READ_TOKEN}" \
+            gway service install web --user root
           exposure="$(sudo -n gway --json wire server logs expose \
             --fqdn logs.register.arthexis.com \
             --cert-email tecnologia@gelectriic.com)"
@@ -158,7 +162,8 @@ jobs:
             "${GWAY_LOG_DESTINATION}/api/logs/${probe_run_id}/events" \
             >/dev/null
 
-      - name: Bootstrap persistent Arthexis Watchtower
+      - name: Bootstrap persistent Arthexis Watchtower with logging
+        if: env.GWAY_LOG_INGEST_TOKEN != '' && env.GWAY_LOG_READ_TOKEN != ''
         shell: bash
         run: |
           set -euo pipefail
@@ -172,8 +177,18 @@ jobs:
           printf '%s\n' "${result}"
           python3 -c 'import json, sys; data = json.load(sys.stdin); print("arthexis bootstrap success=%r" % (data.get("success"),), file=sys.stderr); sys.exit(0 if data.get("success") is True else 1)' <<<"${result}"
 
+      - name: Bootstrap persistent Arthexis Watchtower without logging
+        if: env.GWAY_LOG_INGEST_TOKEN == '' || env.GWAY_LOG_READ_TOKEN == ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="$(sudo -n gway --json install arthexis --service --role Watchtower)"
+          printf '%s\n' "${result}"
+          sudo -n gway arthexis status --json
+          sudo -n gway arthexis good
+
       - name: Verify Watchtower log publication
-        if: always() && github.ref == 'refs/heads/main' && env.GWAY_LOG_READ_TOKEN != ''
+        if: always() && github.ref == 'refs/heads/main' && env.GWAY_LOG_INGEST_TOKEN != '' && env.GWAY_LOG_READ_TOKEN != ''
         shell: bash
         run: |
           set -euo pipefail
