@@ -49,7 +49,7 @@ class RxCiContractTests(unittest.TestCase):
         self.assertEqual(
             statements,
             [
-                "install arthexis --service --role [role|Watchtower]",
+                "install arthexis --service --role Watchtower",
                 "arthexis status --json",
                 "arthexis good",
             ],
