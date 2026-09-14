@@ -44,7 +44,7 @@ class RxCiContractTests(unittest.TestCase):
         self.assertTrue(ARTHEXIS_BOOTSTRAP_RECIPE.is_file())
         statements = [
             line.strip()
-            for line in ARTHEIS_BOOTSTRAP_RECIPE.read_text(encoding="utf-8").splitlines()
+            for line in ARTHEXIS_BOOTSTRAP_RECIPE.read_text(encoding="utf-8").splitlines()
             if line.strip() and not line.lstrip().startswith("#")
         ]
         for statement in statements:
