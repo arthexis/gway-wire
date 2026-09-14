@@ -76,14 +76,15 @@ jobs:
           sudo -n gway upgrade gway --force
 
       # Logging has to exist before the recipe: that recipe is the operation we
-      # need to observe when an upgrade/deploy hangs. Web is refreshed here only
-      # to bootstrap the diagnostics surface; the RX recipe still exercises its
-      # normal managed upgrade later.
+      # need to observe when an upgrade/deploy hangs. Refresh both Web and Wire
+      # here so the bootstrap command runs the current Wire surface together with
+      # the current gway-web dependency before exposing the diagnostics endpoint.
       - name: Bootstrap live GWAY log service
         shell: bash
         run: |
           set -euo pipefail
           sudo -n gway upgrade web
+          sudo -n gway upgrade wire
           sudo -n env GWAY_SERVICE=logs gway service install web --user root
           exposure="$(sudo -n gway --json wire server logs expose \
             --fqdn logs.arthexis.com \
