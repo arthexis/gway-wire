@@ -32,11 +32,11 @@ jobs:
     if: github.actor == 'arthexis'
     name: Live gateway recipe
     runs-on: [self-hosted, Linux, X64]
-    timeout-minutes: 15
+    timeout-minutes: 25
     env:
       GWAY_LOG_DESTINATION: https://logs.register.arthexis.com
-      GWAY_LOG_INGEST_TOKEN: ${{ secrets.GWAY_LOG_INGEST_TOKEN }}
       GWAY_LOG_READ_TOKEN: ${{ secrets.GWAY_LOG_READ_TOKEN }}
+      GATEWAY_LOG_RUN_ID: gateway-${{ github.run_id }}-${{ github.run_attempt }}
       WATCHTOWER_LOG_RUN_ID: watchtower-${{ github.run_id }}-${{ github.run_attempt }}
 
     steps:
@@ -66,25 +66,96 @@ jobs:
           validated="$(bash .github/scripts/validate-recipe-path.sh "${requested}")"
           printf 'path=%s\n' "${validated}" >> "${GITHUB_OUTPUT}"
 
-      # Keep a minimal bootstrap outside the recipe so a gateway that still has a
-      # pre-Chunk-9 GWAY can understand explicit recipe parameters. The recipe
-      # deliberately upgrades GWAY again and executes `reload` to exercise the
-      # real checkpoint/resume path under the current code.
+      # Keep a minimal bootstrap outside the recipe so the runner always begins
+      # with current core semantics. The recipe deliberately upgrades GWAY again
+      # and executes reload to exercise the real checkpoint/resume path.
       - name: Bootstrap current GWAY
         shell: bash
         run: |
           set -euo pipefail
           sudo -n gway upgrade gway --force
 
-      - name: Execute trusted RX recipe
+      # Logging has to exist before the recipe: that recipe is the operation we
+      # need to observe when an upgrade/deploy hangs. Web is refreshed here only
+      # to bootstrap the diagnostics surface; the RX recipe still exercises its
+      # normal managed upgrade later.
+      - name: Bootstrap live GWAY log service
         shell: bash
         run: |
           set -euo pipefail
-          result="$(sudo -n gway --json recipe "${{ steps.recipe.outputs.path }}" \
-            --fqdn register.arthexis.com \
+          sudo -n gway upgrade web
+          sudo -n env GWAY_SERVICE=logs gway service install web --user root
+          exposure="$(sudo -n gway --json wire server logs expose \
+            --fqdn logs.register.arthexis.com \
             --cert-email tecnologia@gelectriic.com)"
+          printf '%s\n' "${exposure}"
+          python3 -c 'import json, sys; data = json.load(sys.stdin); sys.exit(0 if data.get("success") is True else 1)' <<<"${exposure}"
+          curl --fail --show-error --silent --max-time 5 http://127.0.0.1:8040/health
+          echo
+
+      # This creates/reuses the same-host ingest token through GWAY Web and
+      # persists private consumer EnvironmentFiles. No ingest bearer credential
+      # crosses the GitHub Actions boundary.
+      - name: Prime local log consumers
+        id: log_probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          probe_run_id="log-probe-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          probe="$(sudo -n env \
+            GWAY_RUN_ID="${probe_run_id}" \
+            gway --json log \
+            --tags ci,ubuntu22,probe \
+            --to "${GWAY_LOG_DESTINATION}" \
+            --consumers wire,arthexis)"
+          printf '%s\n' "${probe}"
+          python3 -c 'import json, sys; data = json.load(sys.stdin); consumers = set(data.get("consumers") or []); ok = bool(data.get("run_id")) and {"wire", "arthexis"} <= consumers; sys.exit(0 if ok else 1)' <<<"${probe}"
+          printf 'run_id=%s\n' "${probe_run_id}" >> "${GITHUB_OUTPUT}"
+
+      - name: Verify external log read credential
+        if: env.GWAY_LOG_READ_TOKEN != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl \
+            --fail \
+            --show-error \
+            --silent \
+            --max-time 10 \
+            --header "Authorization: Bearer ${GWAY_LOG_READ_TOKEN}" \
+            "${GWAY_LOG_DESTINATION}/api/logs/${{ steps.log_probe.outputs.run_id }}/events" \
+            >/dev/null
+
+      - name: Execute trusted RX recipe
+        timeout-minutes: 8
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="$(sudo -n env \
+            GWAY_RUN_ID="${GATEWAY_LOG_RUN_ID}" \
+            gway --json recipe "${{ steps.recipe.outputs.path }}" \
+            --fqdn register.arthexis.com \
+            --cert-email tecnologia@gelectriic.com \
+            --log_destination "${GWAY_LOG_DESTINATION}")"
           printf '%s\n' "${result}"
           python3 -c 'import json, sys; data = json.load(sys.stdin); print("recipe success=%r" % (data.get("success"),), file=sys.stderr); sys.exit(0 if data.get("success") is True else 1)' <<<"${result}"
+
+      # Run even when the recipe fails/times out at a managed operation. The log
+      # server receives events incrementally, so a reader can inspect the exact
+      # run without waiting for a successful CI completion.
+      - name: Verify gateway recipe log publication
+        if: always() && env.GWAY_LOG_READ_TOKEN != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl \
+            --fail \
+            --show-error \
+            --silent \
+            --max-time 10 \
+            --header "Authorization: Bearer ${GWAY_LOG_READ_TOKEN}" \
+            "${GWAY_LOG_DESTINATION}/api/logs/${GATEWAY_LOG_RUN_ID}/events" \
+            >/dev/null
 
       - name: Verify managed checkout revisions
         shell: bash
@@ -125,73 +196,22 @@ jobs:
             https://register.arthexis.com/health
           echo
 
-      - name: Configure live GWAY log service
-        if: github.ref == 'refs/heads/main' && env.GWAY_LOG_INGEST_TOKEN != '' && env.GWAY_LOG_READ_TOKEN != ''
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo -n env \
-            GWAY_SERVICE=logs \
-            GWAY_LOG_INGEST_TOKEN="${GWAY_LOG_INGEST_TOKEN}" \
-            GWAY_LOG_READ_TOKEN="${GWAY_LOG_READ_TOKEN}" \
-            gway service install web --user root
-          exposure="$(sudo -n gway --json wire server logs expose \
-            --fqdn logs.register.arthexis.com \
-            --cert-email tecnologia@gelectriic.com)"
-          printf '%s\n' "${exposure}"
-          python3 -c 'import json, sys; data = json.load(sys.stdin); sys.exit(0 if data.get("success") is True else 1)' <<<"${exposure}"
-          curl --fail --show-error --silent --max-time 5 http://127.0.0.1:8040/health
-          echo
-
-      - name: Verify live log ingest and read
-        if: github.ref == 'refs/heads/main' && env.GWAY_LOG_INGEST_TOKEN != '' && env.GWAY_LOG_READ_TOKEN != ''
-        shell: bash
-        run: |
-          set -euo pipefail
-          probe_run_id="log-probe-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-          probe="$(sudo -n env \
-            GWAY_RUN_ID="${probe_run_id}" \
-            GWAY_LOG_TOKEN="${GWAY_LOG_INGEST_TOKEN}" \
-            gway --json log --tags ci,ubuntu22 --to "${GWAY_LOG_DESTINATION}")"
-          printf '%s\n' "${probe}"
-          python3 -c 'import json, sys; data = json.load(sys.stdin); sys.exit(0 if data.get("run_id") else 1)' <<<"${probe}"
-          curl \
-            --fail \
-            --show-error \
-            --silent \
-            --max-time 10 \
-            --header "Authorization: Bearer ${GWAY_LOG_READ_TOKEN}" \
-            "${GWAY_LOG_DESTINATION}/api/logs/${probe_run_id}/events" \
-            >/dev/null
-
-      - name: Bootstrap persistent Arthexis Watchtower with logging
-        if: env.GWAY_LOG_INGEST_TOKEN != '' && env.GWAY_LOG_READ_TOKEN != ''
+      - name: Bootstrap persistent Arthexis Watchtower
+        timeout-minutes: 6
         shell: bash
         run: |
           set -euo pipefail
           recipe="$(bash .github/scripts/validate-recipe-path.sh recipes/arthexis-bootstrap.rx)"
           result="$(sudo -n env \
             GWAY_RUN_ID="${WATCHTOWER_LOG_RUN_ID}" \
-            GWAY_LOG_TOKEN="${GWAY_LOG_INGEST_TOKEN}" \
             gway --json recipe "${recipe}" \
             --role Watchtower \
             --log_destination "${GWAY_LOG_DESTINATION}")"
           printf '%s\n' "${result}"
           python3 -c 'import json, sys; data = json.load(sys.stdin); print("arthexis bootstrap success=%r" % (data.get("success"),), file=sys.stderr); sys.exit(0 if data.get("success") is True else 1)' <<<"${result}"
 
-      - name: Bootstrap persistent Arthexis Watchtower without logging
-        if: env.GWAY_LOG_INGEST_TOKEN == '' || env.GWAY_LOG_READ_TOKEN == ''
-        shell: bash
-        run: |
-          set -euo pipefail
-          result="$(sudo -n gway --json install arthexis --service --role Watchtower)"
-          printf '%s\n' "${result}"
-          python3 -c 'import json, sys; data = json.load(sys.stdin); print("arthexis install success=%r" % (data.get("success"),), file=sys.stderr); sys.exit(0 if data.get("success") is True else 1)' <<<"${result}"
-          sudo -n gway arthexis status --json
-          sudo -n gway arthexis good
-
       - name: Verify Watchtower log publication
-        if: always() && github.ref == 'refs/heads/main' && env.GWAY_LOG_INGEST_TOKEN != '' && env.GWAY_LOG_READ_TOKEN != ''
+        if: always() && env.GWAY_LOG_READ_TOKEN != ''
         shell: bash
         run: |
           set -euo pipefail

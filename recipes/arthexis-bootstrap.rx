@@ -3,7 +3,9 @@
 # is idempotent and preserves the persistent instance state under /opt/arthexis/var.
 # Parameters: log_destination
 
-log --tags watchtower,ubuntu22 --to [log_destination]
+# Exercise the singular compatibility form. GWAY obtains/reuses the local ingest
+# credential internally; callers never need to pass the bearer token to this recipe.
+log --tags watchtower,ubuntu22 --to [log_destination] --consumer arthexis
 install arthexis --service --role Watchtower
 arthexis status --json
 arthexis good
