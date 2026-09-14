@@ -12,7 +12,7 @@ def enroll(
     device: str | None = None,
     token_file: Path | None = None,
     token: str | None = None,
-    enroll_url: str = legacy._DEFAULT_ENROLL_URL,
+    enroll_url: str = "[GWAY_WIRE_ENROLL_URL]",
     url: str | None = None,
     protocol: str = DEFAULT_PROTOCOL,
 ) -> dict[str, object]:

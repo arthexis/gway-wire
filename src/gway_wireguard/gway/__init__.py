@@ -5,8 +5,6 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-_DEFAULT_ENROLL_URL = "https://register.arthexis.com/v1/enroll"
-
 
 def _client_installer() -> Path:
     """Locate the checkout's client installer without depending on the caller cwd."""
@@ -21,7 +19,7 @@ def enroll(
     device: str | None = None,
     token_file: Path | None = None,
     token: str | None = None,
-    enroll_url: str = _DEFAULT_ENROLL_URL,
+    enroll_url: str = "[GWAY_WIRE_ENROLL_URL]",
 ) -> dict[str, object]:
     """Enroll this device with the WireGuard gateway without changing directories."""
     command = ["bash", str(_client_installer())]
