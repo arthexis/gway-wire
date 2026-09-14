@@ -5,3 +5,6 @@ aliases = ["wireguard", "wg"]
 [adapter]
 type = "python"
 module = "gway_wire.surface"
+
+[variables]
+GWAY_WIRE_ENROLL_URL = "https://register.arthexis.com/v1/enroll"
