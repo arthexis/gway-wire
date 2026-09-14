@@ -56,3 +56,30 @@ def test_expose_default_timeout_is_five_minutes(monkeypatch) -> None:
     logs.expose(fqdn="logs.example.com")
 
     assert captured["dns_wait_timeout"] == 300.0
+
+
+def test_expose_defaults_to_full_rollback(monkeypatch) -> None:
+    captured = _patch_expose(monkeypatch)
+
+    logs.expose(fqdn="logs.example.com")
+
+    assert captured["rollback"] is True
+    assert captured["dns_rollback"] is True
+
+
+def test_expose_can_disable_only_dns_rollback(monkeypatch) -> None:
+    captured = _patch_expose(monkeypatch)
+
+    logs.expose(fqdn="logs.example.com", dns_rollback=False)
+
+    assert captured["rollback"] is True
+    assert captured["dns_rollback"] is False
+
+
+def test_expose_passes_global_no_rollback(monkeypatch) -> None:
+    captured = _patch_expose(monkeypatch)
+
+    logs.expose(fqdn="logs.example.com", rollback=False)
+
+    assert captured["rollback"] is False
+    assert captured["dns_rollback"] is True
