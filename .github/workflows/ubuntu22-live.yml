@@ -79,6 +79,8 @@ jobs:
       # need to observe when an upgrade/deploy hangs. Refresh both Web and Wire
       # here so the bootstrap command runs the current Wire surface together with
       # the current gway-web dependency before exposing the diagnostics endpoint.
+      # Preserve provider DNS on a propagation timeout so an API-confirmed record
+      # can continue propagating after this bounded live run ends.
       - name: Bootstrap live GWAY log service
         shell: bash
         run: |
@@ -89,6 +91,7 @@ jobs:
           exposure="$(sudo -n gway --json wire server logs expose \
             --fqdn logs.arthexis.com \
             --dns-provider godaddy \
+            --no-dns-rollback \
             --cert-email tecnologia@gelectriic.com)"
           printf '%s\n' "${exposure}"
           python3 -c 'import json, sys; data = json.load(sys.stdin); sys.exit(0 if data.get("success") is True else 1)' <<<"${exposure}"
