@@ -1,8 +1,8 @@
 # Bootstrap and keep a persistent managed Arthexis instance on the live runner.
-# Optional parameter: role (defaults to Terminal).
+# Optional parameter: role (defaults to Watchtower).
 # Re-running this recipe is intentionally non-destructive: Arthexis managed install
 # is idempotent and preserves the persistent instance state under /opt/arthexis/var.
 
-install arthexis --service --role [role|Terminal]
+install arthexis --service --role [role|Watchtower]
 arthexis status --json
 arthexis good
