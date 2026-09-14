@@ -88,6 +88,21 @@ class RxCiContractTests(unittest.TestCase):
         self.assertIn("GATEWAY_LOG_RUN_ID", text)
         self.assertIn("- name: Verify gateway recipe log publication", text)
 
+    def test_live_workflow_reserves_job_time_for_log_readback(self) -> None:
+        text = WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("- name: Execute trusted RX recipe\n        timeout-minutes: 8", text)
+        self.assertIn(
+            "- name: Bootstrap persistent Arthexis Watchtower\n        timeout-minutes: 6",
+            text,
+        )
+        self.assertIn("timeout-minutes: 15", text)
+        gateway = text.index("- name: Execute trusted RX recipe")
+        gateway_readback = text.index("- name: Verify gateway recipe log publication")
+        watchtower = text.index("- name: Bootstrap persistent Arthexis Watchtower")
+        watchtower_readback = text.index("- name: Verify Watchtower log publication")
+        self.assertLess(gateway, gateway_readback)
+        self.assertLess(watchtower, watchtower_readback)
+
     def test_live_workflow_does_not_require_ingest_secret(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")
         self.assertNotIn("GWAY_LOG_INGEST_TOKEN", text)
