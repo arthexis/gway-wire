@@ -30,7 +30,7 @@ jobs:
     if: github.actor == 'arthexis'
     name: Live gateway recipe
     runs-on: [self-hosted, Linux, X64]
-    timeout-minutes: 30
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v7
