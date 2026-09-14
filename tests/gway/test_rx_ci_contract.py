@@ -49,6 +49,7 @@ class RxCiContractTests(unittest.TestCase):
         self.assertEqual(
             statements,
             [
+                "log --tags watchtower,ubuntu22 --to [log_destination]",
                 "install arthexis --service --role Watchtower",
                 "arthexis status --json",
                 "arthexis good",
