@@ -69,6 +69,16 @@ class RxCiContractTests(unittest.TestCase):
         self.assertNotIn("gway install web", text)
         self.assertNotIn("gway upgrade web --force", text)
 
+    def test_main_live_workflow_bootstraps_arthexis_after_gateway_health(self) -> None:
+        text = WORKFLOW.read_text(encoding="utf-8")
+        health = text.index("- name: Verify live public health")
+        arthexis = text.index("- name: Bootstrap persistent Arthexis Watchtower")
+        self.assertLess(health, arthexis)
+        self.assertIn("if: github.event_name == 'push'", text)
+        self.assertIn("recipes/arthexis-bootstrap.rx", text)
+        self.assertIn("--role Watchtower", text)
+        self.assertIn("arthexis bootstrap success=%r", text)
+
     def test_live_workflow_parses_top_level_recipe_and_readiness_results(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("json.load(sys.stdin)", text)
