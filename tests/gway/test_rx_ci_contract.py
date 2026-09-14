@@ -24,8 +24,12 @@ class RxCiContractTests(unittest.TestCase):
         for statement in statements:
             self.assertTrue(shlex.split(statement))
 
-        self.assertEqual(statements[0], "upgrade gway --force")
-        self.assertEqual(statements[1], "reload")
+        self.assertEqual(
+            statements[0],
+            "log --tags ci,ubuntu22 --to [log_destination] --consumers wire,arthexis",
+        )
+        self.assertEqual(statements[1], "upgrade gway --force")
+        self.assertEqual(statements[2], "reload")
         self.assertIn("upgrade wire", statements)
         self.assertIn("upgrade web", statements)
         self.assertNotIn("upgrade wire --force", statements)
@@ -49,7 +53,7 @@ class RxCiContractTests(unittest.TestCase):
         self.assertEqual(
             statements,
             [
-                "log --tags watchtower,ubuntu22 --to [log_destination]",
+                "log --tags watchtower,ubuntu22 --to [log_destination] --consumer arthexis",
                 "install arthexis --service --role Watchtower",
                 "arthexis status --json",
                 "arthexis good",
@@ -61,14 +65,35 @@ class RxCiContractTests(unittest.TestCase):
         text = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("default: recipes/ubuntu22-live.rx", text)
         self.assertIn("validate-recipe-path.sh", text)
-        self.assertIn('gway --json recipe', text)
+        self.assertIn("gway --json recipe", text)
         self.assertIn("--fqdn register.arthexis.com", text)
         self.assertIn("--cert-email tecnologia@gelectriic.com", text)
+        self.assertIn('--log_destination "${GWAY_LOG_DESTINATION}"', text)
 
-        # Lifecycle policy belongs to the .rx file, not duplicated as YAML shell steps.
+        # Normal lifecycle policy remains in the .rx file. Web has one explicit
+        # early refresh solely so the diagnostic service exists before that recipe.
         self.assertNotIn("gway upgrade wire --force", text)
         self.assertNotIn("gway install web", text)
         self.assertNotIn("gway upgrade web --force", text)
+        self.assertIn("sudo -n gway upgrade web", text)
+
+    def test_live_workflow_primes_log_consumers_before_recipe(self) -> None:
+        text = WORKFLOW.read_text(encoding="utf-8")
+        log_service = text.index("- name: Bootstrap live GWAY log service")
+        consumers = text.index("- name: Prime local log consumers")
+        recipe = text.index("- name: Execute trusted RX recipe")
+        self.assertLess(log_service, consumers)
+        self.assertLess(consumers, recipe)
+        self.assertIn("--consumers wire,arthexis", text)
+        self.assertIn("GATEWAY_LOG_RUN_ID", text)
+        self.assertIn("- name: Verify gateway recipe log publication", text)
+
+    def test_live_workflow_does_not_require_ingest_secret(self) -> None:
+        text = WORKFLOW.read_text(encoding="utf-8")
+        self.assertNotIn("GWAY_LOG_INGEST_TOKEN", text)
+        self.assertNotIn('GWAY_LOG_TOKEN="${', text)
+        self.assertIn("GWAY_LOG_READ_TOKEN", text)
+        self.assertIn("if: env.GWAY_LOG_READ_TOKEN != ''", text)
 
     def test_main_live_workflow_bootstraps_arthexis_after_gateway_health(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")
