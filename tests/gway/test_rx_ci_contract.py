@@ -44,7 +44,7 @@ class RxCiContractTests(unittest.TestCase):
         self.assertTrue(ARTHEXIS_BOOTSTRAP_RECIPE.is_file())
         statements = [
             line.strip()
-            for line in ARTHEXIS_BOOTSTRAP_RECIPE.read_text(encoding="utf-8").splitlines()
+            for line in ARTHEIS_BOOTSTRAP_RECIPE.read_text(encoding="utf-8").splitlines()
             if line.strip() and not line.lstrip().startswith("#")
         ]
         for statement in statements:
@@ -95,7 +95,7 @@ class RxCiContractTests(unittest.TestCase):
             "- name: Bootstrap persistent Arthexis Watchtower\n        timeout-minutes: 6",
             text,
         )
-        self.assertIn("timeout-minutes: 15", text)
+        self.assertIn("timeout-minutes: 25", text)
         gateway = text.index("- name: Execute trusted RX recipe")
         gateway_readback = text.index("- name: Verify gateway recipe log publication")
         watchtower = text.index("- name: Bootstrap persistent Arthexis Watchtower")
