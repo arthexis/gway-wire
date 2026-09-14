@@ -12,7 +12,6 @@ from urllib.parse import urlsplit, urlunsplit
 from gway_wire.config import read_environment_file
 from gway_wire.gway.protocols import DEFAULT_PROTOCOL, require_protocol
 
-_DEFAULT_ENROLL_URL = "https://register.arthexis.com/v1/enroll"
 _DEFAULT_ENROLL_PATH = "/v1/enroll"
 _DEFAULT_STATE_DIR = Path("/etc/gway-wireguard")
 _DEFAULT_SERVER_ENV_FILE = Path("/etc/gway-wireguard/server.env")
@@ -107,7 +106,7 @@ def enroll(
     device: str | None = None,
     token_file: Path | None = None,
     token: str | None = None,
-    enroll_url: str = _DEFAULT_ENROLL_URL,
+    enroll_url: str = "[GWAY_WIRE_ENROLL_URL]",
     url: str | None = None,
     protocol: str = DEFAULT_PROTOCOL,
 ) -> dict[str, object]:
