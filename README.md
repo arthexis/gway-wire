@@ -78,6 +78,12 @@ The canonical Python namespace is `gway_wire`. The previous `gway_wireguard` nam
 
 Mutating administrative commands require access to root-owned gateway state. Until GWAY's system/appliance installation mode owns that privilege boundary, `server/admin.py` remains the standalone gateway compatibility entrypoint for the Phase 3 operations it already supports.
 
+## Live RX integration recipes
+
+Trusted gateway integration policy is checked in under [`recipes/`](recipes/). The default self-hosted CI program is [`recipes/ubuntu22-live.rx`](recipes/ubuntu22-live.rx), which is executed directly with `gway recipe` and exercises GWAY self-upgrade/reload before refreshing and validating the live Wire/Web stack.
+
+Manual live workflow runs may select another recipe, but the selector only accepts Git-tracked `.rx` files under `recipes/`; it is not an arbitrary command input. See [docs/recipes.md](docs/recipes.md) for the runner contract, local invocation, trust boundary, and the checks intentionally kept outside the recipe language.
+
 ## Scope
 
 `gway-wire` owns connections between endpoints rather than general network configuration. WireGuard remains the only implemented transport today. Future transports can fit under the same endpoint model when there is a concrete need, including UART and other point-to-point protocols. Wi-Fi, Ethernet, address management, and broad host networking remain concerns for network-oriented projects rather than `wire` itself.
