@@ -116,7 +116,6 @@ def enroll(
     URL automatically receives ``/v1/enroll`` when no path is supplied.
     """
     require_protocol(protocol)
-    active_url = _normalize_enroll_url(url if url is not None else enroll_url)
     supplied_token = _enrollment_token_value(token, token_file)
     if supplied_token:
         try:
@@ -139,6 +138,7 @@ def enroll(
                 ),
             }
 
+    active_url = _normalize_enroll_url(url if url is not None else enroll_url)
     command = ["bash", str(_client_installer())]
     if device:
         command.extend(["--device", device])
