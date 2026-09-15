@@ -36,6 +36,7 @@ jobs:
     env:
       GWAY_LOG_DESTINATION: https://logs.arthexis.com
       GWAY_LOG_READ_TOKEN: ${{ secrets.GWAY_LOG_READ_TOKEN }}
+      GWAY_REPO_READ_TOKEN: ${{ secrets.GWAY_REPO_READ_TOKEN }}
       GATEWAY_LOG_RUN_ID: gateway-${{ github.run_id }}-${{ github.run_attempt }}
       WATCHTOWER_LOG_RUN_ID: watchtower-${{ github.run_id }}-${{ github.run_attempt }}
 
@@ -89,6 +90,45 @@ jobs:
           curl --fail --show-error --silent --max-time 5 http://127.0.0.1:8040/health
           echo
 
+      - name: Bootstrap authenticated repository API
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${GWAY_REPO_READ_TOKEN}"
+          sudo -n gway upgrade repo
+          sudo -n gway upgrade web
+          policy="$(sudo -n gway --json web api \
+            --base-domain arthexis.com \
+            --project repo \
+            --functions context,impact,prs,map,files,symbols,code \
+            --scope repo:read)"
+          printf '%s\n' "${policy}"
+          token_metadata="$(sudo -n env GWAY_REPO_READ_TOKEN="${GWAY_REPO_READ_TOKEN}" \
+            gway --json web token \
+            --name repo-api \
+            --scope repo:read \
+            --provision-env GWAY_REPO_READ_TOKEN)"
+          printf '%s\n' "${token_metadata}"
+          sudo -n env GWAY_SERVICE=api gway service install web --user root
+          curl --fail --show-error --silent --max-time 5 http://127.0.0.1:8050/health
+          echo
+          exposure="$(sudo -n gway --json wire server public expose \
+            --fqdn repo.arthexis.com \
+            --upstream http://127.0.0.1:8050 \
+            --dns-provider godaddy \
+            --no-dns-rollback \
+            --cert-email tecnologia@gelectriic.com)"
+          printf '%s\n' "${exposure}"
+          python3 -c 'import json, sys; data = json.loads(sys.argv[1]); sys.exit(0 if data.get("success") is True else 1)' "${exposure}"
+          unauthenticated="$(curl --show-error --silent --output /dev/null \
+            --write-out '%{http_code}' --max-time 10 \
+            'https://repo.arthexis.com/map?path=/var/lib/gway/projects/arthexis/gway-repo')"
+          test "${unauthenticated}" = "401"
+          authenticated="$(curl --fail --show-error --silent --max-time 10 \
+            --header "Authorization: Bearer ${GWAY_REPO_READ_TOKEN}" \
+            'https://repo.arthexis.com/map?path=/var/lib/gway/projects/arthexis/gway-repo&file_limit=5')"
+          python3 -c 'import json, sys; data = json.loads(sys.argv[1]); sys.exit(0 if data.get("ok") is True else 1)' "${authenticated}"
+
       - name: Prime local log consumers
         id: log_probe
         shell: bash
@@ -141,7 +181,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for checkout in /var/lib/gway/projects/arthexis/gway-wire /var/lib/gway/projects/arthexis/gway-web; do
+          for checkout in \
+            /var/lib/gway/projects/arthexis/gway-wire \
+            /var/lib/gway/projects/arthexis/gway-web \
+            /var/lib/gway/projects/arthexis/gway-repo; do
             sudo -n git -C "${checkout}" rev-parse --is-inside-work-tree >/dev/null
             head="$(sudo -n git -C "${checkout}" rev-parse HEAD)"
             upstream="$(sudo -n git -C "${checkout}" ls-remote --exit-code origin refs/heads/main | awk '{print $1}')"
@@ -164,48 +207,6 @@ jobs:
           python3 -c 'import json, sys; data = json.loads(sys.argv[1]); ok = data.get("ok") is True and data.get("ready") is True; print("readiness ok=%r ready=%r" % (data.get("ok"), data.get("ready")), file=sys.stderr); sys.exit(0 if ok else 1)' "${readiness}"
           curl --fail --show-error --silent --max-time 10 https://register.arthexis.com/health
           echo
-
-      # Diagnostic only: identify exactly which persistent Python/Django artifact
-      # can still expose the removed generate_certs command before managed install.
-      - name: Diagnose Arthexis command discovery
-        shell: bash
-        run: |
-          set -u
-          echo '=== generate_certs filesystem candidates ==='
-          sudo -n find /opt/arthexis /var/lib/gway -xdev \
-            \( -name 'generate_certs*' -o -path '*/apps/certs/*' \) \
-            -printf '%y %p -> %l\n' 2>/dev/null | sort || true
-          echo '=== Python cache candidates ==='
-          sudo -n find /opt/arthexis /var/lib/gway -xdev \
-            \( -name '*.pyc' -o -name '*.pyo' -o -name '__pycache__' \) \
-            -path '*cert*' -printf '%y %p -> %l\n' 2>/dev/null | sort || true
-          echo '=== Arthexis Python environments ==='
-          for python in /opt/arthexis/venv/bin/python /opt/arthexis/.venv/bin/python /opt/arthexis/app/.venv/bin/python; do
-            if sudo -n test -x "${python}"; then
-              echo "--- ${python} ---"
-              sudo -n "${python}" - <<'PY' || true
-          import importlib.util
-          import os
-          import sys
-          print('executable=', sys.executable)
-          print('cwd=', os.getcwd())
-          print('sys.path:')
-          for item in sys.path:
-              print(' ', item)
-          for name in ('apps', 'apps.certs', 'apps.certs.models'):
-              try:
-                  spec = importlib.util.find_spec(name)
-                  print(f'{name}: origin={getattr(spec, "origin", None)!r} locations={list(spec.submodule_search_locations or []) if spec else None!r}')
-              except Exception as exc:
-                  print(f'{name}: ERROR {type(exc).__name__}: {exc}')
-          PY
-            fi
-          done
-          echo '=== managed Arthexis checkout state ==='
-          if sudo -n test -d /opt/arthexis/app/.git; then
-            sudo -n git -C /opt/arthexis/app rev-parse HEAD || true
-            sudo -n git -C /opt/arthexis/app status --porcelain --ignored || true
-          fi
 
       - name: Bootstrap persistent Arthexis Watchtower
         timeout-minutes: 6
