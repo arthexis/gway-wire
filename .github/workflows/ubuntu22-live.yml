@@ -125,11 +125,10 @@ jobs:
             'https://repo.arthexis.com/map?path=/var/lib/gway/projects/arthexis/gway-repo')"
           test "${unauthenticated}" = "401"
           authenticated="$(
-            curl --fail --show-error --silent --max-time 10 \
-              --header @- \
-              'https://repo.arthexis.com/map?path=/var/lib/gway/projects/arthexis/gway-repo&file_limit=5' <<EOF
-Authorization: Bearer ${GWAY_REPO_READ_TOKEN}
-EOF
+            printf 'Authorization: Bearer %s\n' "${GWAY_REPO_READ_TOKEN}" |
+              curl --fail --show-error --silent --max-time 10 \
+                --header @- \
+                'https://repo.arthexis.com/map?path=/var/lib/gway/projects/arthexis/gway-repo&file_limit=5'
           )"
           python3 -c 'import json, sys; data = json.loads(sys.argv[1]); sys.exit(0 if data.get("ok") is True else 1)' "${authenticated}"
 
