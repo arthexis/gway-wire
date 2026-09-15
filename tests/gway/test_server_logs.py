@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from gway_wire.surface.server import logs
+from gway_wire.surface.server import logs, public
 
 
 class ServerLogsTests(unittest.TestCase):
@@ -32,7 +32,7 @@ class ServerLogsTests(unittest.TestCase):
                 captured.update(kwargs)
                 return {"success": True, "fqdn": kwargs["fqdn"]}
 
-            with patch.object(logs, "exposure_ensure", fake_ensure):
+            with patch.object(public, "exposure_ensure", fake_ensure):
                 result = logs.expose(
                     fqdn="logs.register.arthexis.com",
                     env_file=env_file,
