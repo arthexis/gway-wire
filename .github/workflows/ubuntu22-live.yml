@@ -110,8 +110,19 @@ jobs:
             --provision-env GWAY_REPO_READ_TOKEN)"
           printf '%s\n' "${token_metadata}"
           sudo -n env GWAY_SERVICE=api gway service install web --user root
-          curl --fail --show-error --silent --max-time 5 http://127.0.0.1:8050/health
-          echo
+          api_ready=false
+          for attempt in {1..10}; do
+            if curl --fail --silent --max-time 2 http://127.0.0.1:8050/health >/dev/null; then
+              api_ready=true
+              break
+            fi
+            sleep 0.5
+          done
+          if [[ "${api_ready}" != "true" ]]; then
+            sudo -n systemctl status gway-web-api.service --no-pager || true
+            sudo -n journalctl -u gway-web-api.service -n 100 --no-pager || true
+            exit 1
+          fi
           exposure="$(sudo -n gway --json wire server public expose \
             --fqdn repo.arthexis.com \
             --upstream http://127.0.0.1:8050 \
