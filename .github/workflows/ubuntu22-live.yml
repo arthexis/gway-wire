@@ -131,10 +131,14 @@ jobs:
             --cert-email tecnologia@gelectriic.com)"
           printf '%s\n' "${exposure}"
           python3 -c 'import json, sys; data = json.loads(sys.argv[1]); sys.exit(0 if data.get("success") is True else 1)' "${exposure}"
-          unauthenticated="$(curl --show-error --silent --output /dev/null \
-            --write-out '%{http_code}' --max-time 10 \
-            'https://repo.arthexis.com/map?path=/var/lib/gway/projects/arthexis/gway-repo')"
-          test "${unauthenticated}" = "401"
+
+          unauthenticated="$(
+            curl --show-error --silent --output /dev/null \
+              --write-out '%{http_code}' --max-time 10 \
+              'https://repo.arthexis.com/map?path=/var/lib/gway/projects/arthexis/gway-repo' || true
+          )"
+          printf '%s\n' '--- public unauthenticated response ---'
+          printf 'status=%s\n' "${unauthenticated}"
 
           request_path='/map?path=/var/lib/gway/projects/arthexis/gway-repo&file_limit=5'
           public_headers="$(mktemp)"
@@ -150,7 +154,7 @@ jobs:
                 --dump-header "${public_headers}" \
                 --output "${public_body}" \
                 --write-out '%{http_code}' \
-                "https://repo.arthexis.com${request_path}"
+                "https://repo.arthexis.com${request_path}" || true
           )"
           printf '%s\n' '--- public authenticated response ---'
           printf 'status=%s\n' "${public_status}"
@@ -167,7 +171,7 @@ jobs:
                 --dump-header "${local_headers}" \
                 --output "${local_body}" \
                 --write-out '%{http_code}' \
-                "http://127.0.0.1:8050${request_path}"
+                "http://127.0.0.1:8050${request_path}" || true
           )"
           printf '%s\n' '--- local authenticated response ---'
           printf 'status=%s\n' "${local_status}"
@@ -176,6 +180,7 @@ jobs:
           cat "${local_body}"
           printf '\n'
 
+          test "${unauthenticated}" = "401"
           test "${public_status}" = "200"
           test "${local_status}" = "200"
           authenticated="$(cat "${public_body}")"
