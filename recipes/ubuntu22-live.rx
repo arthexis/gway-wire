@@ -10,9 +10,10 @@ log --tags ci,ubuntu22 --to [log_destination] --consumers wire,arthexis
 upgrade gway --force
 reload
 
-# Refresh the managed gateway projects through GWAY itself.
-upgrade wire
-upgrade web
+# Converge the managed gateway projects through GWAY itself. Existing projects
+# upgrade; a fresh host installs the missing project.
+upgrade wire --install
+upgrade web --install
 
 # Confirm the managed Web surface is available after refresh.
 web site

@@ -30,8 +30,8 @@ class RxCiContractTests(unittest.TestCase):
         )
         self.assertEqual(statements[1], "upgrade gway --force")
         self.assertEqual(statements[2], "reload")
-        self.assertIn("upgrade wire", statements)
-        self.assertIn("upgrade web", statements)
+        self.assertIn("upgrade wire --install", statements)
+        self.assertIn("upgrade web --install", statements)
         self.assertNotIn("upgrade wire --force", statements)
         self.assertNotIn("upgrade web --force", statements)
         self.assertIn("web site", statements)
@@ -54,7 +54,7 @@ class RxCiContractTests(unittest.TestCase):
             statements,
             [
                 "log --tags watchtower,ubuntu22 --to [log_destination] --consumer arthexis",
-                "install arthexis --service --role Watchtower",
+                "upgrade arthexis --install --service --role Watchtower",
                 "arthexis status --json",
                 "arthexis good",
             ],
@@ -74,9 +74,9 @@ class RxCiContractTests(unittest.TestCase):
         # force-upgrade behavior; normal lifecycle policy remains in the .rx file.
         self.assertNotIn("gway upgrade wire --force", text)
         self.assertNotIn("gway upgrade web --force", text)
-        self.assertIn("sudo -n gway install web", text)
-        self.assertIn("sudo -n gway install wire", text)
-        self.assertIn("sudo -n gway install repo", text)
+        self.assertIn("sudo -n gway upgrade web --install", text)
+        self.assertIn("sudo -n gway upgrade wire --install", text)
+        self.assertIn("sudo -n gway upgrade repo --install", text)
 
     def test_live_workflow_uses_explicit_log_dns(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")
