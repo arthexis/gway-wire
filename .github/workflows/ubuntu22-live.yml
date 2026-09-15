@@ -66,21 +66,12 @@ jobs:
           validated="$(bash .github/scripts/validate-recipe-path.sh "${requested}")"
           printf 'path=%s\n' "${validated}" >> "${GITHUB_OUTPUT}"
 
-      # Keep a minimal bootstrap outside the recipe so the runner always begins
-      # with current core semantics. The recipe deliberately upgrades GWAY again
-      # and executes reload to exercise the real checkpoint/resume path.
       - name: Bootstrap current GWAY
         shell: bash
         run: |
           set -euo pipefail
           sudo -n gway upgrade gway --force
 
-      # Logging has to exist before the recipe: that recipe is the operation we
-      # need to observe when an upgrade/deploy hangs. Refresh both Web and Wire
-      # here so the bootstrap command runs the current Wire surface together with
-      # the current gway-web dependency before exposing the diagnostics endpoint.
-      # Preserve provider DNS on a propagation timeout so an API-confirmed record
-      # can continue propagating after this bounded live run ends.
       - name: Bootstrap live GWAY log service
         shell: bash
         run: |
@@ -98,9 +89,6 @@ jobs:
           curl --fail --show-error --silent --max-time 5 http://127.0.0.1:8040/health
           echo
 
-      # This creates/reuses the same-host ingest token through GWAY Web and
-      # persists private consumer EnvironmentFiles. No ingest bearer credential
-      # crosses the GitHub Actions boundary.
       - name: Prime local log consumers
         id: log_probe
         shell: bash
@@ -122,14 +110,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl \
-            --fail \
-            --show-error \
-            --silent \
-            --max-time 10 \
+          curl --fail --show-error --silent --max-time 10 \
             --header "Authorization: Bearer ${GWAY_LOG_READ_TOKEN}" \
-            "${GWAY_LOG_DESTINATION}/api/logs/${{ steps.log_probe.outputs.run_id }}/events" \
-            >/dev/null
+            "${GWAY_LOG_DESTINATION}/api/logs/${{ steps.log_probe.outputs.run_id }}/events" >/dev/null
 
       - name: Execute trusted RX recipe
         timeout-minutes: 8
@@ -145,38 +128,26 @@ jobs:
           printf '%s\n' "${result}"
           python3 -c 'import json, sys; data = json.loads(sys.argv[1]); print("recipe success=%r" % (data.get("success"),), file=sys.stderr); sys.exit(0 if data.get("success") is True else 1)' "${result}"
 
-      # Run even when the recipe fails/times out at a managed operation. The log
-      # server receives events incrementally, so a reader can inspect the exact
-      # run without waiting for a successful CI completion.
       - name: Verify gateway recipe log publication
         if: always() && env.GWAY_LOG_READ_TOKEN != ''
         shell: bash
         run: |
           set -euo pipefail
-          curl \
-            --fail \
-            --show-error \
-            --silent \
-            --max-time 10 \
+          curl --fail --show-error --silent --max-time 10 \
             --header "Authorization: Bearer ${GWAY_LOG_READ_TOKEN}" \
-            "${GWAY_LOG_DESTINATION}/api/logs/${GATEWAY_LOG_RUN_ID}/events" \
-            >/dev/null
+            "${GWAY_LOG_DESTINATION}/api/logs/${GATEWAY_LOG_RUN_ID}/events" >/dev/null
 
       - name: Verify managed checkout revisions
         shell: bash
         run: |
           set -euo pipefail
-          for checkout in \
-            /var/lib/gway/projects/arthexis/gway-wire \
-            /var/lib/gway/projects/arthexis/gway-web
-          do
+          for checkout in /var/lib/gway/projects/arthexis/gway-wire /var/lib/gway/projects/arthexis/gway-web; do
             sudo -n git -C "${checkout}" rev-parse --is-inside-work-tree >/dev/null
             head="$(sudo -n git -C "${checkout}" rev-parse HEAD)"
             upstream="$(sudo -n git -C "${checkout}" ls-remote --exit-code origin refs/heads/main | awk '{print $1}')"
             printf '%s HEAD=%s origin/main=%s\n' "${checkout}" "${head}" "${upstream}"
             test -n "${upstream}"
             test "${head}" = "${upstream}"
-
             status="$(sudo -n git -C "${checkout}" status --porcelain)"
             if [[ -n "${status}" ]]; then
               printf 'managed checkout is dirty: %s\n%s\n' "${checkout}" "${status}" >&2
@@ -184,8 +155,6 @@ jobs:
             fi
           done
 
-      # Raw host/network assertions stay in Actions rather than growing shell or
-      # conditional semantics inside the .rx language.
       - name: Verify live public health
         shell: bash
         run: |
@@ -193,13 +162,50 @@ jobs:
           readiness="$(sudo -n gway --json wire server check --fqdn register.arthexis.com)"
           printf '%s\n' "${readiness}"
           python3 -c 'import json, sys; data = json.loads(sys.argv[1]); ok = data.get("ok") is True and data.get("ready") is True; print("readiness ok=%r ready=%r" % (data.get("ok"), data.get("ready")), file=sys.stderr); sys.exit(0 if ok else 1)' "${readiness}"
-          curl \
-            --fail \
-            --show-error \
-            --silent \
-            --max-time 10 \
-            https://register.arthexis.com/health
+          curl --fail --show-error --silent --max-time 10 https://register.arthexis.com/health
           echo
+
+      # Diagnostic only: identify exactly which persistent Python/Django artifact
+      # can still expose the removed generate_certs command before managed install.
+      - name: Diagnose Arthexis command discovery
+        shell: bash
+        run: |
+          set -u
+          echo '=== generate_certs filesystem candidates ==='
+          sudo -n find /opt/arthexis /var/lib/gway -xdev \
+            \( -name 'generate_certs*' -o -path '*/apps/certs/*' \) \
+            -printf '%y %p -> %l\n' 2>/dev/null | sort || true
+          echo '=== Python cache candidates ==='
+          sudo -n find /opt/arthexis /var/lib/gway -xdev \
+            \( -name '*.pyc' -o -name '*.pyo' -o -name '__pycache__' \) \
+            -path '*cert*' -printf '%y %p -> %l\n' 2>/dev/null | sort || true
+          echo '=== Arthexis Python environments ==='
+          for python in /opt/arthexis/venv/bin/python /opt/arthexis/.venv/bin/python /opt/arthexis/app/.venv/bin/python; do
+            if sudo -n test -x "${python}"; then
+              echo "--- ${python} ---"
+              sudo -n "${python}" - <<'PY' || true
+          import importlib.util
+          import os
+          import sys
+          print('executable=', sys.executable)
+          print('cwd=', os.getcwd())
+          print('sys.path:')
+          for item in sys.path:
+              print(' ', item)
+          for name in ('apps', 'apps.certs', 'apps.certs.models'):
+              try:
+                  spec = importlib.util.find_spec(name)
+                  print(f'{name}: origin={getattr(spec, "origin", None)!r} locations={list(spec.submodule_search_locations or []) if spec else None!r}')
+              except Exception as exc:
+                  print(f'{name}: ERROR {type(exc).__name__}: {exc}')
+          PY
+            fi
+          done
+          echo '=== managed Arthexis checkout state ==='
+          if sudo -n test -d /opt/arthexis/app/.git; then
+            sudo -n git -C /opt/arthexis/app rev-parse HEAD || true
+            sudo -n git -C /opt/arthexis/app status --porcelain --ignored || true
+          fi
 
       - name: Bootstrap persistent Arthexis Watchtower
         timeout-minutes: 6
@@ -220,11 +226,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl \
-            --fail \
-            --show-error \
-            --silent \
-            --max-time 10 \
+          curl --fail --show-error --silent --max-time 10 \
             --header "Authorization: Bearer ${GWAY_LOG_READ_TOKEN}" \
-            "${GWAY_LOG_DESTINATION}/api/logs/${WATCHTOWER_LOG_RUN_ID}/events" \
-            >/dev/null
+            "${GWAY_LOG_DESTINATION}/api/logs/${WATCHTOWER_LOG_RUN_ID}/events" >/dev/null
