@@ -130,7 +130,8 @@ class RxCiContractTests(unittest.TestCase):
 
     def test_live_workflow_parses_top_level_recipe_and_readiness_results(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn("json.load(sys.stdin)", text)
+        self.assertIn("json.loads(sys.argv[1])", text)
+        self.assertNotIn("json.load(sys.stdin)", text)
         self.assertIn('data.get("success") is True', text)
         self.assertIn('data.get("ok") is True', text)
         self.assertIn('data.get("ready") is True', text)
