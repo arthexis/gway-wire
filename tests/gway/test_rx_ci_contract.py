@@ -70,12 +70,13 @@ class RxCiContractTests(unittest.TestCase):
         self.assertIn("--cert-email tecnologia@gelectriic.com", text)
         self.assertIn('--log_destination "${GWAY_LOG_DESTINATION}"', text)
 
-        # Normal lifecycle policy remains in the .rx file. Web has one explicit
-        # early refresh solely so the diagnostic service exists before that recipe.
+        # Bootstrap establishes required managed projects without destructive
+        # force-upgrade behavior; normal lifecycle policy remains in the .rx file.
         self.assertNotIn("gway upgrade wire --force", text)
-        self.assertNotIn("gway install web", text)
         self.assertNotIn("gway upgrade web --force", text)
-        self.assertIn("sudo -n gway upgrade web", text)
+        self.assertIn("sudo -n gway install web", text)
+        self.assertIn("sudo -n gway install wire", text)
+        self.assertIn("sudo -n gway install repo", text)
 
     def test_live_workflow_uses_explicit_log_dns(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")

@@ -77,8 +77,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo -n gway upgrade web
-          sudo -n gway upgrade wire
+          sudo -n gway install web
+          sudo -n gway install wire
           sudo -n env GWAY_SERVICE=logs gway service install web --user root
           exposure="$(sudo -n gway --json wire server logs expose \
             --fqdn logs.arthexis.com \
@@ -95,8 +95,8 @@ jobs:
         run: |
           set -euo pipefail
           test -n "${GWAY_REPO_READ_TOKEN}"
-          sudo -n gway upgrade repo
-          sudo -n gway upgrade web
+          sudo -n gway install repo
+          sudo -n gway install web
           policy="$(sudo -n gway --json web api \
             --base-domain arthexis.com \
             --project repo \
