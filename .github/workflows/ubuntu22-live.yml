@@ -103,7 +103,7 @@ jobs:
             --functions context,impact,prs,map,files,symbols,code \
             --scope repo:read)"
           printf '%s\n' "${policy}"
-          token_metadata="$(sudo -n env GWAY_REPO_READ_TOKEN="${GWAY_REPO_READ_TOKEN}" \
+          token_metadata="$(sudo -n --preserve-env=GWAY_REPO_READ_TOKEN \
             gway --json web token \
             --name repo-api \
             --scope repo:read \
@@ -124,9 +124,13 @@ jobs:
             --write-out '%{http_code}' --max-time 10 \
             'https://repo.arthexis.com/map?path=/var/lib/gway/projects/arthexis/gway-repo')"
           test "${unauthenticated}" = "401"
-          authenticated="$(curl --fail --show-error --silent --max-time 10 \
-            --header "Authorization: Bearer ${GWAY_REPO_READ_TOKEN}" \
-            'https://repo.arthexis.com/map?path=/var/lib/gway/projects/arthexis/gway-repo&file_limit=5')"
+          authenticated="$(
+            curl --fail --show-error --silent --max-time 10 \
+              --header @- \
+              'https://repo.arthexis.com/map?path=/var/lib/gway/projects/arthexis/gway-repo&file_limit=5' <<EOF
+Authorization: Bearer ${GWAY_REPO_READ_TOKEN}
+EOF
+          )"
           python3 -c 'import json, sys; data = json.loads(sys.argv[1]); sys.exit(0 if data.get("ok") is True else 1)' "${authenticated}"
 
       - name: Prime local log consumers
