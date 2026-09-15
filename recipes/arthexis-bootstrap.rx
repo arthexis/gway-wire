@@ -1,11 +1,11 @@
 # Bootstrap and keep a persistent managed Arthexis Watchtower on the live runner.
-# Re-running this recipe is intentionally non-destructive: Arthexis managed install
-# is idempotent and preserves the persistent instance state under /opt/arthexis/var.
+# Re-running this recipe is intentionally non-destructive: upgrade is attempted
+# first, with install used only when Arthexis is not yet managed on the host.
 # Parameters: log_destination
 
 # Exercise the singular compatibility form. GWAY obtains/reuses the local ingest
 # credential internally; callers never need to pass the bearer token to this recipe.
 log --tags watchtower,ubuntu22 --to [log_destination] --consumer arthexis
-install arthexis --service --role Watchtower
+upgrade arthexis --install --service --role Watchtower
 arthexis status --json
 arthexis good
