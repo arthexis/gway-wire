@@ -135,12 +135,50 @@ jobs:
             --write-out '%{http_code}' --max-time 10 \
             'https://repo.arthexis.com/map?path=/var/lib/gway/projects/arthexis/gway-repo')"
           test "${unauthenticated}" = "401"
-          authenticated="$(
+
+          request_path='/map?path=/var/lib/gway/projects/arthexis/gway-repo&file_limit=5'
+          public_headers="$(mktemp)"
+          public_body="$(mktemp)"
+          local_headers="$(mktemp)"
+          local_body="$(mktemp)"
+          trap 'rm -f "${public_headers}" "${public_body}" "${local_headers}" "${local_body}"' EXIT
+
+          public_status="$(
             printf 'Authorization: Bearer %s\n' "${GWAY_REPO_READ_TOKEN}" |
-              curl --fail --show-error --silent --max-time 10 \
+              curl --show-error --silent --max-time 10 \
                 --header @- \
-                'https://repo.arthexis.com/map?path=/var/lib/gway/projects/arthexis/gway-repo&file_limit=5'
+                --dump-header "${public_headers}" \
+                --output "${public_body}" \
+                --write-out '%{http_code}' \
+                "https://repo.arthexis.com${request_path}"
           )"
+          printf '%s\n' '--- public authenticated response ---'
+          printf 'status=%s\n' "${public_status}"
+          cat "${public_headers}"
+          printf '%s\n' 'body:'
+          cat "${public_body}"
+          printf '\n'
+
+          local_status="$(
+            printf 'Authorization: Bearer %s\n' "${GWAY_REPO_READ_TOKEN}" |
+              curl --show-error --silent --max-time 10 \
+                --header @- \
+                --header 'Host: repo.arthexis.com' \
+                --dump-header "${local_headers}" \
+                --output "${local_body}" \
+                --write-out '%{http_code}' \
+                "http://127.0.0.1:8050${request_path}"
+          )"
+          printf '%s\n' '--- local authenticated response ---'
+          printf 'status=%s\n' "${local_status}"
+          cat "${local_headers}"
+          printf '%s\n' 'body:'
+          cat "${local_body}"
+          printf '\n'
+
+          test "${public_status}" = "200"
+          test "${local_status}" = "200"
+          authenticated="$(cat "${public_body}")"
           python3 -c 'import json, sys; data = json.loads(sys.argv[1]); sys.exit(0 if data.get("ok") is True else 1)' "${authenticated}"
 
       - name: Prime local log consumers
