@@ -27,26 +27,27 @@ command -v certbot >/dev/null || fail "certbot is required"
 command -v nginx >/dev/null || fail "nginx is required"
 command -v gway >/dev/null || fail "gway is required"
 
-legacy_present=false
-if sudo -n test -e "${legacy_site}" || sudo -n test -e "/etc/letsencrypt/live/${fqdn}"; then
-  legacy_present=true
+live_present=false
+renewal_present=false
+legacy_site_present=false
+managed_site_present=false
+certbot_managed=false
+
+sudo -n test -e "/etc/letsencrypt/live/${fqdn}" && live_present=true
+sudo -n test -e "/etc/letsencrypt/renewal/${fqdn}.conf" && renewal_present=true
+sudo -n test -e "${legacy_site}" && legacy_site_present=true
+sudo -n test -e "${managed_site}" && managed_site_present=true
+
+certbot_inventory="$(sudo -n certbot certificates 2>&1 || true)"
+if grep -Eq "Certificate Name: ${fqdn//./\.}$" <<<"${certbot_inventory}"; then
+  certbot_managed=true
 fi
 
-if [[ "${legacy_present}" == true ]]; then
-  sudo -n test -e "/etc/letsencrypt/live/${fqdn}" || fail "legacy nginx state exists but expected live lineage is missing"
-  sudo -n test -e "${legacy_site}" || fail "legacy live lineage exists but expected nginx site is missing"
-  sudo -n test ! -e "${managed_site}" || fail "legacy and GWay-managed nginx sites coexist; refusing repair"
-
-  mapfile -t renewal_files < <(
-    sudo -n find /etc/letsencrypt/renewal -mindepth 1 -maxdepth 1 -type f \
-      -name "${fqdn}*.conf" -print 2>/dev/null | sort || true
-  )
-  ((${#renewal_files[@]} == 0)) || fail "matching Certbot renewal metadata now exists while legacy state remains; refusing repair"
-
-  certbot_inventory="$(sudo -n certbot certificates 2>&1 || true)"
-  if grep -Eq "Certificate Name: ${fqdn//./\.}(-[0-9]+)?$" <<<"${certbot_inventory}"; then
-    fail "Certbot now manages an arthexis.com lineage while legacy state remains; refusing repair"
-  fi
+if [[ "${legacy_site_present}" == true ]]; then
+  [[ "${live_present}" == true ]] || fail "legacy nginx state exists but expected live lineage is missing"
+  [[ "${renewal_present}" == false ]] || fail "legacy nginx state coexists with renewal metadata; refusing ambiguous repair"
+  [[ "${certbot_managed}" == false ]] || fail "legacy nginx state coexists with a managed Certbot lineage; refusing ambiguous repair"
+  [[ "${managed_site_present}" == false ]] || fail "legacy and GWay-managed nginx sites coexist; refusing repair"
 
   mapfile -t nginx_refs < <(
     sudo -n grep -R -l -E \
@@ -70,10 +71,6 @@ if [[ "${legacy_present}" == true ]]; then
 
   printf 'Repairing legacy certificate state for %s\n' "${fqdn}"
   printf 'Backup directory: %s\n' "${backup_dir}"
-  printf 'Live lineages:\n'; printf '  %s\n' "${live_dirs[@]}"
-  printf 'Archive lineages:\n'; printf '  %s\n' "${archive_dirs[@]:-}"
-  printf 'Legacy nginx site: %s\n' "${legacy_site}"
-
   sudo -n install -d -m 0700 "${backup_dir}/letsencrypt/live" "${backup_dir}/letsencrypt/archive" "${backup_dir}/nginx"
   sudo -n cp -a "${legacy_site}" "${backup_dir}/nginx/"
   sudo -n rm -f "${legacy_site}"
@@ -84,14 +81,28 @@ if [[ "${legacy_present}" == true ]]; then
   for path in "${archive_dirs[@]}"; do
     sudo -n mv "${path}" "${backup_dir}/letsencrypt/archive/"
   done
-else
+elif [[ "${live_present}" == true && "${renewal_present}" == true && "${certbot_managed}" == true ]]; then
+  echo "Fresh Certbot-managed ${fqdn} lineage already exists; resuming at nginx exposure reconciliation."
+elif [[ "${live_present}" == false && "${renewal_present}" == false && "${certbot_managed}" == false ]]; then
   latest_backup="$(sudo -n find "${backup_root}" -mindepth 1 -maxdepth 1 -type d \
     -name "${fqdn}-*" -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n1 | cut -d' ' -f2- || true)"
-  [[ -n "${latest_backup}" ]] || fail "legacy state is absent and no quarantine backup exists; refusing ambiguous repair"
+  [[ -n "${latest_backup}" ]] || fail "apex certificate state is absent and no quarantine backup exists; refusing ambiguous repair"
   echo "Legacy state already quarantined; resuming from ${latest_backup}"
+else
+  fail "inconsistent ${fqdn} certificate state: live=${live_present} renewal=${renewal_present} certbot_managed=${certbot_managed} legacy_site=${legacy_site_present}"
 fi
 
+# The development hostname is retired. Remove exact-domain server and Certbot
+# residue before rebuilding the apex vhost so it cannot remain nginx's fallback
+# certificate. The retirement helper fails closed on mixed nginx files.
+bash "${script_dir}/retire-dev-gelectriic-state.sh"
+
 sudo -n nginx -t
+
+# Prove the application upstream is locally healthy before asking GWay to make
+# it public. A failure here triggers the upstream diagnostic bundle.
+curl --fail --show-error --silent --max-time 15 "http://127.0.0.1:8888/health/"
+echo
 
 exposure="$(sudo -n gway --json wire server public expose \
   --fqdn "${fqdn}" \
@@ -104,7 +115,7 @@ printf '%s\n' "${exposure}"
 python3 -c 'import json, sys; data=json.loads(sys.argv[1]); sys.exit(0 if data.get("success") is True else 1)' "${exposure}"
 
 sudo -n nginx -t
-sudo -n test -e "/etc/letsencrypt/renewal/${fqdn}.conf" || fail "fresh managed renewal config was not created"
+sudo -n test -e "/etc/letsencrypt/renewal/${fqdn}.conf" || fail "fresh managed renewal config is missing"
 sudo -n test -e "${managed_site}" || fail "GWay-managed nginx site was not created"
 
 curl --fail --show-error --silent --max-time 15 "https://${fqdn}/health/"
