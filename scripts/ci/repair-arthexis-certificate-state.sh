@@ -7,6 +7,15 @@ managed_site="/etc/nginx/sites-enabled/gway-${fqdn}.conf"
 backup_root="/var/backups/gway-certificate-repair"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 backup_dir="${backup_root}/${fqdn}-${stamp}"
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+diagnostics_on_error() {
+  status=$?
+  echo "Repair failed with exit status ${status}; capturing upstream diagnostics." >&2
+  bash "${script_dir}/watchtower-arthexis-upstream-diagnostics.sh" || true
+  return "${status}"
+}
+trap diagnostics_on_error ERR
 
 fail() {
   echo "ERROR: $*" >&2
@@ -24,8 +33,6 @@ if sudo -n test -e "${legacy_site}" || sudo -n test -e "/etc/letsencrypt/live/${
 fi
 
 if [[ "${legacy_present}" == true ]]; then
-  # Guard the exact legacy state observed by Watchtower diagnostics. This repair
-  # is deliberately not a general certificate cleanup command.
   sudo -n test -e "/etc/letsencrypt/live/${fqdn}" || fail "legacy nginx state exists but expected live lineage is missing"
   sudo -n test -e "${legacy_site}" || fail "legacy live lineage exists but expected nginx site is missing"
   sudo -n test ! -e "${managed_site}" || fail "legacy and GWay-managed nginx sites coexist; refusing repair"
@@ -41,8 +48,6 @@ if [[ "${legacy_present}" == true ]]; then
     fail "Certbot now manages an arthexis.com lineage while legacy state remains; refusing repair"
   fi
 
-  # Only treat the apex hostname as a reference. Subdomains such as
-  # logs.arthexis.com and repo.arthexis.com are unrelated managed sites.
   mapfile -t nginx_refs < <(
     sudo -n grep -R -l -E \
       "server_name[^;]*(^|[[:space:]])${fqdn//./\.}([[:space:];]|$)|ssl_certificate(_key)?[[:space:]]+/etc/letsencrypt/live/${fqdn//./\.}/" \
@@ -80,9 +85,6 @@ if [[ "${legacy_present}" == true ]]; then
     sudo -n mv "${path}" "${backup_dir}/letsencrypt/archive/"
   done
 else
-  # A prior attempt may already have quarantined the legacy material and then
-  # failed during public health validation. Allow that exact partial state to
-  # resume through the normal GWay exposure path instead of requiring rollback.
   latest_backup="$(sudo -n find "${backup_root}" -mindepth 1 -maxdepth 1 -type d \
     -name "${fqdn}-*" -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n1 | cut -d' ' -f2- || true)"
   [[ -n "${latest_backup}" ]] || fail "legacy state is absent and no quarantine backup exists; refusing ambiguous repair"
@@ -91,9 +93,6 @@ fi
 
 sudo -n nginx -t
 
-# The normal GWay path is intentionally used for both first-run and resume. If
-# certificate/nginx provisioning already happened before a failed health check,
-# ensure() should reuse that managed state and retry the public health check.
 exposure="$(sudo -n gway --json wire server public expose \
   --fqdn "${fqdn}" \
   --upstream http://127.0.0.1:8888 \
@@ -110,4 +109,5 @@ sudo -n test -e "${managed_site}" || fail "GWay-managed nginx site was not creat
 
 curl --fail --show-error --silent --max-time 15 "https://${fqdn}/health/"
 echo
+trap - ERR
 printf 'Repair completed successfully.\n'
