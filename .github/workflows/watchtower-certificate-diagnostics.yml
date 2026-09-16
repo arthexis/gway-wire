@@ -1,6 +1,8 @@
 name: Watchtower Certificate Diagnostics
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       fqdn:
