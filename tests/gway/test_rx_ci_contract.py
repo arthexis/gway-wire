@@ -127,7 +127,7 @@ class RxCiContractTests(unittest.TestCase):
         self.assertNotIn("if: github.event_name == 'push'", text)
         self.assertIn("recipes/arthexis-bootstrap.rx", text)
         self.assertIn("--role Watchtower", text)
-        self.assertIn("arthexis bootstrap success=%r", text)
+        self.assertIn("arthexis bootstrap result=%r", text)
 
     def test_live_workflow_parses_top_level_recipe_and_readiness_results(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")
