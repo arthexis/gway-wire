@@ -1,0 +1,132 @@
+name: Diagnose Arthexis Command Discovery
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/diagnose-arthexis-command.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Read-only diagnostics for the persistent Watchtower. This intentionally runs
+# only on trusted main/manual executions and does not mutate the installation.
+jobs:
+  diagnose:
+    if: github.actor == 'arthexis'
+    name: Locate stale Django command
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 5
+    steps:
+      - name: Verify Watchtower installation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d /opt/arthexis/app
+          test -x /opt/arthexis/.venv/bin/python
+          sudo -n true
+          sudo -n git -C /opt/arthexis/app rev-parse HEAD
+          sudo -n /opt/arthexis/.venv/bin/python --version
+
+      - name: Locate stale cert command artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' '--- generate_certs and certs model artifacts under /opt/arthexis ---'
+          sudo -n find /opt/arthexis -type f \
+            \( -name 'generate_certs.py' \
+               -o -name 'generate_certs*.pyc' \
+               -o -path '*/apps/certs/models.py' \
+               -o -path '*/apps/certs/models*.pyc' \) \
+            -print | sort
+
+          printf '%s\n' '--- certs files in managed checkout ---'
+          sudo -n find /opt/arthexis/app/apps/certs -maxdepth 6 -type f -print | sort
+
+          printf '%s\n' '--- tracked certs files ---'
+          sudo -n git -C /opt/arthexis/app ls-files apps/certs
+
+          printf '%s\n' '--- ignored/untracked certs status ---'
+          sudo -n git -C /opt/arthexis/app status --short --ignored -- apps/certs
+
+          printf '%s\n' '--- certs artifacts in virtualenv site-packages ---'
+          sudo -n find /opt/arthexis/.venv -type f \
+            \( -path '*/site-packages/apps/certs/*' \
+               -o -name 'generate_certs*.pyc' \
+               -o -name 'generate_certs.py' \) \
+            -print | sort
+
+      - name: Inspect Python and Django command resolution
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /opt/arthexis/app
+          sudo -n env DJANGO_SETTINGS_MODULE=config.settings \
+            /opt/arthexis/.venv/bin/python - <<'PY'
+          from __future__ import annotations
+
+          import importlib.util
+          import os
+          import sys
+          import traceback
+
+          print('executable:', sys.executable)
+          print('cwd:', os.getcwd())
+          print('sys.path:')
+          for entry in sys.path:
+              print(' ', repr(entry))
+
+          import apps
+          import apps.certs
+
+          print('apps.__file__:', getattr(apps, '__file__', None))
+          print('apps.__path__:', list(getattr(apps, '__path__', ())))
+          print('apps.certs.__file__:', getattr(apps.certs, '__file__', None))
+          print('apps.certs.__path__:', list(getattr(apps.certs, '__path__', ())))
+
+          import django
+
+          django.setup()
+          from django.apps import apps as django_apps
+          from django.core.management import get_commands, load_command_class
+
+          config = django_apps.get_app_config('certs')
+          print('certs app name:', config.name)
+          print('certs app path:', config.path)
+
+          commands = get_commands()
+          provider = commands.get('generate_certs')
+          print('generate_certs provider:', provider)
+          if provider:
+              module_name = f'{provider}.management.commands.generate_certs'
+              try:
+                  spec = importlib.util.find_spec(module_name)
+              except Exception:
+                  print('find_spec failed:')
+                  traceback.print_exc()
+              else:
+                  print('generate_certs spec:', spec)
+                  print('generate_certs origin:', getattr(spec, 'origin', None))
+                  print('generate_certs loader:', type(getattr(spec, 'loader', None)).__name__)
+
+              try:
+                  command = load_command_class(provider, 'generate_certs')
+              except Exception:
+                  print('load_command_class failed:')
+                  traceback.print_exc()
+              else:
+                  print('command class module:', command.__class__.__module__)
+          PY
+
+      - name: Inspect editable installation metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo -n /opt/arthexis/.venv/bin/python -m pip show arthexis
+          printf '%s\n' '--- editable/package metadata ---'
+          sudo -n find /opt/arthexis/.venv -maxdepth 5 -type f \
+            \( -name '*arthexis*.pth' \
+               -o -name '__editable__*arthexis*' \
+               -o -path '*/arthexis-*.dist-info/*' \) \
+            -print | sort
