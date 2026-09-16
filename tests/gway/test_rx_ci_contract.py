@@ -40,7 +40,7 @@ class RxCiContractTests(unittest.TestCase):
             "wire server deploy --fqdn [fqdn] --cert-email [cert_email]",
         )
 
-    def test_arthexis_bootstrap_recipe_is_persistent_and_health_checked(self) -> None:
+    def test_arthexis_bootstrap_recipe_is_persistent_and_configures_site(self) -> None:
         self.assertTrue(ARTHEXIS_BOOTSTRAP_RECIPE.is_file())
         statements = [
             line.strip()
@@ -53,12 +53,13 @@ class RxCiContractTests(unittest.TestCase):
         self.assertEqual(
             statements,
             [
-                "log --tags watchtower,ubuntu22 --to [log_destination] --consumer arthexis",
-                "upgrade arthexis --install --service --service-profile Watchtower --role Watchtower",
+                "log --tags watchtower,deploy --to [log_destination] --consumer arthexis",
+                "upgrade arthexis --install --service --role Watchtower --site arthexis.com",
                 "arthexis status --json",
-                "arthexis good",
             ],
         )
+        self.assertFalse(any("service-profile" in statement for statement in statements))
+        self.assertFalse(any("arthexis good" == statement for statement in statements))
         self.assertFalse(any("uninstall" in statement for statement in statements))
 
     def test_live_workflow_executes_checked_in_recipe_directly(self) -> None:
@@ -118,16 +119,27 @@ class RxCiContractTests(unittest.TestCase):
         self.assertIn("GWAY_LOG_READ_TOKEN", text)
         self.assertIn("if: env.GWAY_LOG_READ_TOKEN != ''", text)
 
-    def test_main_live_workflow_bootstraps_arthexis_after_gateway_health(self) -> None:
+    def test_watchtower_deploy_exposes_arthexis_after_bootstrap(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")
         health = text.index("- name: Verify live public health")
-        arthexis = text.index("- name: Bootstrap persistent Arthexis Watchtower")
-        self.assertLess(health, arthexis)
+        bootstrap = text.index("- name: Bootstrap persistent Arthexis Watchtower")
+        expose = text.index("- name: Expose and verify Arthexis public site")
+        good = text.index("sudo -n gway arthexis good")
+        self.assertLess(health, bootstrap)
+        self.assertLess(bootstrap, expose)
+        self.assertLess(expose, good)
+        self.assertIn("name: Watchtower Deploy", text)
         self.assertIn("workflow_dispatch:", text)
         self.assertNotIn("if: github.event_name == 'push'", text)
         self.assertIn("recipes/arthexis-bootstrap.rx", text)
-        self.assertIn("--role Watchtower", text)
+        self.assertNotIn("--service-profile", text)
         self.assertIn("arthexis bootstrap result=%r", text)
+        self.assertIn("--fqdn arthexis.com", text)
+        self.assertIn("--upstream http://127.0.0.1:8888", text)
+        self.assertIn("--health-path /health/", text)
+        self.assertIn("gway web site arthexis --url", text)
+        self.assertIn("gway --json web check arthexis --public", text)
+        self.assertIn("https://arthexis.com/health/", text)
 
     def test_live_workflow_parses_top_level_recipe_and_readiness_results(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")
