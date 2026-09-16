@@ -1,0 +1,32 @@
+name: Watchtower Certificate Diagnostics
+
+on:
+  workflow_dispatch:
+    inputs:
+      fqdn:
+        description: FQDN to inspect on the trusted Watchtower runner
+        required: false
+        default: arthexis.com
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    if: github.actor == 'arthexis'
+    name: Inspect certificate state
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Inspect Watchtower certificate state
+        shell: bash
+        env:
+          TARGET_FQDN: ${{ github.event.inputs.fqdn }}
+        run: |
+          set -euo pipefail
+          bash scripts/ci/watchtower-certificate-diagnostics.sh "${TARGET_FQDN:-arthexis.com}"
