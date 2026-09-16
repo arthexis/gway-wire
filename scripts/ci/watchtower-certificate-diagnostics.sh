@@ -3,6 +3,11 @@ set -u
 
 fqdn="${1:-arthexis.com}"
 
+if ! sudo -n true 2>/dev/null; then
+  echo "Noninteractive sudo is required for certificate diagnostics." >&2
+  exit 1
+fi
+
 section() {
   printf '\n===== %s =====\n' "$1"
 }
@@ -60,7 +65,7 @@ sudo -n grep -R -n -E \
   /etc/nginx/sites-enabled /etc/nginx/conf.d 2>/dev/null || true
 
 section "Publicly served certificate"
-echo | openssl s_client -connect "${fqdn}:443" -servername "${fqdn}" 2>/dev/null |
+echo | timeout 10s openssl s_client -connect "${fqdn}:443" -servername "${fqdn}" 2>/dev/null |
   openssl x509 -noout -subject -issuer -dates -ext subjectAltName 2>&1 || true
 
 section "Public health"
