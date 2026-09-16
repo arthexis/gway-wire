@@ -6,6 +6,6 @@
 # Exercise the singular compatibility form. GWAY obtains/reuses the local ingest
 # credential internally; callers never need to pass the bearer token to this recipe.
 log --tags watchtower,ubuntu22 --to [log_destination] --consumer arthexis
-upgrade arthexis --install --service --role Watchtower
+upgrade arthexis --install --service --service-profile Watchtower --role Watchtower
 arthexis status --json
 arthexis good

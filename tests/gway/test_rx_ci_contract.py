@@ -54,7 +54,7 @@ class RxCiContractTests(unittest.TestCase):
             statements,
             [
                 "log --tags watchtower,ubuntu22 --to [log_destination] --consumer arthexis",
-                "upgrade arthexis --install --service --role Watchtower",
+                "upgrade arthexis --install --service --service-profile Watchtower --role Watchtower",
                 "arthexis status --json",
                 "arthexis good",
             ],
