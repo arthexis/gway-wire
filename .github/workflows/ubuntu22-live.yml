@@ -1,4 +1,4 @@
-name: Ubuntu 22 Live Integration
+name: Watchtower Deploy
 
 on:
   push:
@@ -15,22 +15,22 @@ permissions:
   contents: read
 
 # This workflow intentionally never runs for pull_request or feature-branch pushes.
-# The self-hosted runner is the live Ubuntu 22 gateway, so only trusted pushes to
-# main from the repository owner may execute here. A manual run may select only a
-# tracked .rx file under recipes/; it cannot supply arbitrary shell commands or
+# The self-hosted runner is the trusted Watchtower gateway, so only trusted pushes
+# to main from the repository owner may execute here. A manual run may select only
+# a tracked .rx file under recipes/; it cannot supply arbitrary shell commands or
 # paths outside that tree. Manual dispatches exercise the same full integration
-# path as a push, including refreshing the persistent Arthexis Watchtower after
-# baseline checks. Only the newest live run matters; replace any stale
-# queued/in-progress run so manual retries and fresh main pushes can reach the
-# single gateway runner.
+# path as a push, including refreshing and exposing the persistent Arthexis
+# Watchtower after baseline checks. Only the newest live run matters; replace any
+# stale queued/in-progress run so manual retries and fresh main pushes can reach
+# the single gateway runner.
 concurrency:
-  group: ubuntu22-live-gateway
+  group: watchtower-deploy
   cancel-in-progress: true
 
 jobs:
   live:
     if: github.actor == 'arthexis'
-    name: Live gateway recipe
+    name: Deploy Watchtower
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 25
     env:
@@ -274,10 +274,36 @@ jobs:
           result="$(sudo -n env \
             GWAY_RUN_ID="${WATCHTOWER_LOG_RUN_ID}" \
             gway --json recipe "${recipe}" \
-            --role Watchtower \
             --log_destination "${GWAY_LOG_DESTINATION}")"
           printf '%s\n' "${result}"
           python3 -c 'import json, sys; data = json.loads(sys.argv[1]); print("arthexis bootstrap result=%r" % (data,), file=sys.stderr)' "${result}"
+
+      - name: Expose and verify Arthexis public site
+        timeout-minutes: 6
+        shell: bash
+        run: |
+          set -euo pipefail
+          exposure="$(sudo -n gway --json wire server public expose \
+            --fqdn arthexis.com \
+            --upstream http://127.0.0.1:8888 \
+            --health-path /health/ \
+            --dns-provider godaddy \
+            --no-dns-rollback \
+            --cert-email tecnologia@gelectriic.com)"
+          printf '%s\n' "${exposure}"
+          python3 -c 'import json, sys; data = json.loads(sys.argv[1]); sys.exit(0 if data.get("success") is True else 1)' "${exposure}"
+
+          site_url="$(sudo -n gway web site arthexis --url)"
+          printf 'arthexis site=%s\n' "${site_url}"
+          test "${site_url}" = "https://arthexis.com"
+
+          public_check="$(sudo -n gway --json web check arthexis --public)"
+          printf '%s\n' "${public_check}"
+          python3 -c 'import json, sys; data = json.loads(sys.argv[1]); sys.exit(0 if data and all(item.get("ok") is True for item in data) else 1)' "${public_check}"
+
+          sudo -n gway arthexis good
+          curl --fail --show-error --silent --max-time 10 https://arthexis.com/health/
+          echo
 
       - name: Verify Watchtower log publication
         if: always() && env.GWAY_LOG_READ_TOKEN != ''
