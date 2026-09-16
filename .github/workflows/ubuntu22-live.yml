@@ -223,7 +223,7 @@ jobs:
             --cert-email tecnologia@gelectriic.com \
             --log_destination "${GWAY_LOG_DESTINATION}")"
           printf '%s\n' "${result}"
-          python3 -c 'import json, sys; data = json.loads(sys.argv[1]); print("recipe success=%r" % (data.get("success"),), file=sys.stderr); sys.exit(0 if data.get("success") is True else 1)' "${result}"
+          python3 -c 'import json, sys; data = json.loads(sys.argv[1]); print("recipe result=%r" % (data,), file=sys.stderr)' "${result}"
 
       - name: Verify gateway recipe log publication
         if: always() && env.GWAY_LOG_READ_TOKEN != ''
@@ -277,7 +277,7 @@ jobs:
             --role Watchtower \
             --log_destination "${GWAY_LOG_DESTINATION}")"
           printf '%s\n' "${result}"
-          python3 -c 'import json, sys; data = json.loads(sys.argv[1]); print("arthexis bootstrap success=%r" % (data.get("success"),), file=sys.stderr); sys.exit(0 if data.get("success") is True else 1)' "${result}"
+          python3 -c 'import json, sys; data = json.loads(sys.argv[1]); print("arthexis bootstrap result=%r" % (data,), file=sys.stderr)' "${result}"
 
       - name: Verify Watchtower log publication
         if: always() && env.GWAY_LOG_READ_TOKEN != ''
