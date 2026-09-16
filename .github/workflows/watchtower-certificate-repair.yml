@@ -1,0 +1,56 @@
+name: Watchtower Certificate Repair
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type REPAIR arthexis.com to authorize the one-time legacy certificate repair'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: watchtower-certificate-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    if: github.actor == 'arthexis' && github.event.inputs.confirmation == 'REPAIR arthexis.com'
+    name: Repair arthexis.com certificate state
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Verify trusted Watchtower runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          . /etc/os-release
+          test "${ID}" = "ubuntu"
+          test "${VERSION_ID}" = "22.04"
+          sudo -n true
+
+      - name: Record pre-repair certificate state
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/ci/watchtower-certificate-diagnostics.sh arthexis.com
+
+      - name: Repair legacy arthexis.com certificate state
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/ci/repair-arthexis-certificate-state.sh
+
+      - name: Verify repaired certificate state
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/ci/watchtower-certificate-diagnostics.sh arthexis.com
+          curl --fail --show-error --silent --max-time 15 https://arthexis.com/health/
+          echo
