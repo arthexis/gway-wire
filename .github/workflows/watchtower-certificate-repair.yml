@@ -17,14 +17,25 @@ concurrency:
 
 jobs:
   repair:
-    if: github.actor == 'arthexis' && github.event.inputs.confirmation == 'REPAIR arthexis.com'
+    if: github.actor == 'arthexis'
     name: Repair arthexis.com certificate state
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 10
+    env:
+      REPAIR_CONFIRMATION: ${{ inputs.confirmation }}
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+
+      - name: Verify repair authorization
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${REPAIR_CONFIRMATION}" != 'REPAIR arthexis.com' ]]; then
+            echo "Repair authorization did not match the required confirmation string." >&2
+            exit 1
+          fi
 
       - name: Verify trusted Watchtower runner
         shell: bash
