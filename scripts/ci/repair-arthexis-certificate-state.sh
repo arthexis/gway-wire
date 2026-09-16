@@ -35,9 +35,12 @@ if grep -Eq "Certificate Name: ${fqdn//./\.}(-[0-9]+)?$" <<<"${certbot_inventory
   fail "Certbot now manages an arthexis.com lineage; refusing repair"
 fi
 
+# Only treat the apex hostname as a reference. Subdomains such as
+# logs.arthexis.com and repo.arthexis.com are unrelated managed sites and must
+# not block this one-time apex repair.
 mapfile -t nginx_refs < <(
   sudo -n grep -R -l -E \
-    "server_name[^;]*${fqdn//./\.}|ssl_certificate(_key)?[^;]*${fqdn//./\.}" \
+    "server_name[^;]*(^|[[:space:]])${fqdn//./\.}([[:space:];]|$)|ssl_certificate(_key)?[[:space:]]+/etc/letsencrypt/live/${fqdn//./\.}/" \
     /etc/nginx/sites-enabled /etc/nginx/conf.d 2>/dev/null | sort -u || true
 )
 ((${#nginx_refs[@]} > 0)) || fail "no nginx references for ${fqdn} were found"
