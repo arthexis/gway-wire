@@ -90,6 +90,82 @@ jobs:
           curl --fail --show-error --silent --max-time 5 http://127.0.0.1:8040/health
           echo
 
+      - name: Bootstrap authenticated Watchtower MCP endpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # gway-web PR #39 introduces the MCP command/service. Keep the live
+          # Watchtower deploy compatible with web/main until that PR lands; once
+          # available, this same flow automatically provisions the endpoint.
+          if ! sudo -n gway --json web mcp >/dev/null 2>&1; then
+            echo 'gway-web MCP support is not on main yet; skipping MCP bootstrap'
+            exit 0
+          fi
+
+          test -n "${GWAY_LOG_READ_TOKEN}"
+
+          api_policy="$(sudo -n gway --json web api \
+            --base-domain arthexis.com \
+            --project web \
+            --functions list-runs,get-run,get-events \
+            --scope logs:read)"
+          printf '%s\n' "${api_policy}"
+
+          mcp_policy="$(sudo -n gway --json web mcp \
+            --project web \
+            --functions list-runs,get-run,get-events \
+            --host mcp.arthexis.com)"
+          printf '%s\n' "${mcp_policy}"
+
+          token_metadata="$(sudo -n --preserve-env=GWAY_LOG_READ_TOKEN \
+            gway --json web token \
+            --name watchtower-mcp \
+            --scope logs:read \
+            --provision-env GWAY_LOG_READ_TOKEN)"
+          printf '%s\n' "${token_metadata}"
+
+          sudo -n env GWAY_SERVICE=mcp gway service install web --user root
+          mcp_ready=false
+          for attempt in {1..10}; do
+            if curl --fail --silent --max-time 2 http://127.0.0.1:8051/health >/dev/null; then
+              mcp_ready=true
+              break
+            fi
+            sleep 0.5
+          done
+          if [[ "${mcp_ready}" != "true" ]]; then
+            sudo -n systemctl status gway-web-mcp.service --no-pager || true
+            sudo -n journalctl -u gway-web-mcp.service -n 100 --no-pager || true
+            exit 1
+          fi
+
+          exposure="$(sudo -n gway --json wire server public expose \
+            --fqdn mcp.arthexis.com \
+            --upstream http://127.0.0.1:8051 \
+            --health-path /health \
+            --dns-provider godaddy \
+            --no-dns-rollback \
+            --cert-email tecnologia@gelectriic.com)"
+          printf '%s\n' "${exposure}"
+          python3 -c 'import json, sys; data = json.loads(sys.argv[1]); sys.exit(0 if data.get("success") is True else 1)' "${exposure}"
+
+          curl --fail --show-error --silent --max-time 10 \
+            https://mcp.arthexis.com/health
+          echo
+
+          unauthenticated="$(
+            curl --show-error --silent --output /dev/null \
+              --write-out '%{http_code}' --max-time 10 \
+              --request POST \
+              --header 'Content-Type: application/json' \
+              --header 'Accept: application/json, text/event-stream' \
+              --data '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
+              https://mcp.arthexis.com/mcp || true
+          )"
+          printf 'unauthenticated MCP status=%s\n' "${unauthenticated}"
+          test "${unauthenticated}" != "200"
+
       - name: Bootstrap authenticated repository API
         shell: bash
         run: |
