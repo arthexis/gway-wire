@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-RECIPE = ROOT / "recipes" / "ubuntu22-live.rx"
+RECIPE = ROOT / "recipes" / "arthexis-watchtower.rx"
 ARTHEXIS_BOOTSTRAP_RECIPE = ROOT / "recipes" / "arthexis-bootstrap.rx"
 WORKFLOW = ROOT / ".github" / "workflows" / "ubuntu22-live.yml"
 VALIDATOR = ROOT / ".github" / "scripts" / "validate-recipe-path.sh"
@@ -64,7 +64,7 @@ class RxCiContractTests(unittest.TestCase):
 
     def test_live_workflow_executes_checked_in_recipe_directly(self) -> None:
         text = WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn("default: recipes/ubuntu22-live.rx", text)
+        self.assertIn("default: recipes/arthexis-watchtower.rx", text)
         self.assertIn("validate-recipe-path.sh", text)
         self.assertIn("gway --json recipe", text)
         self.assertIn("--fqdn register.arthexis.com", text)
@@ -162,14 +162,14 @@ class RxCiContractTests(unittest.TestCase):
 
     def test_recipe_path_validator_accepts_tracked_default(self) -> None:
         result = subprocess.run(
-            ["bash", str(VALIDATOR), "recipes/ubuntu22-live.rx"],
+            ["bash", str(VALIDATOR), "recipes/arthexis-watchtower.rx"],
             cwd=ROOT,
             check=False,
             capture_output=True,
             text=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), "recipes/ubuntu22-live.rx")
+        self.assertEqual(result.stdout.strip(), "recipes/arthexis-watchtower.rx")
 
     def test_recipe_path_validator_accepts_tracked_arthexis_bootstrap(self) -> None:
         result = subprocess.run(
