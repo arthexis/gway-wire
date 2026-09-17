@@ -4,10 +4,10 @@
 
 ## Live gateway recipe
 
-The default live recipe is `recipes/ubuntu22-live.rx`. Run it on a trusted gateway with explicit invocation parameters:
+The default live recipe is `recipes/arthexis-watchtower.rx`. Run it on a trusted gateway with explicit invocation parameters:
 
 ```bash
-sudo gway recipe recipes/ubuntu22-live.rx \
+sudo gway recipe recipes/arthexis-watchtower.rx \
   --fqdn register.arthexis.com \
   --cert-email tecnologia@gelectriic.com
 ```
@@ -31,7 +31,7 @@ Manual runs expose a `recipe` input. The value is not a command string: `.github
 The default is:
 
 ```text
-recipes/ubuntu22-live.rx
+recipes/arthexis-watchtower.rx
 ```
 
 This makes the runner contract simple: **GitHub selects a trusted checked-in recipe; GWAY executes it.**

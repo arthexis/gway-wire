@@ -8,7 +8,7 @@ on:
       recipe:
         description: Checked-in recipe under recipes/ to execute on the live gateway
         required: false
-        default: recipes/ubuntu22-live.rx
+        default: recipes/arthexis-watchtower.rx
         type: string
 
 permissions:
@@ -63,7 +63,7 @@ jobs:
           REQUESTED_RECIPE: ${{ github.event.inputs.recipe }}
         run: |
           set -euo pipefail
-          requested="${REQUESTED_RECIPE:-recipes/ubuntu22-live.rx}"
+          requested="${REQUESTED_RECIPE:-recipes/arthexis-watchtower.rx}"
           validated="$(bash .github/scripts/validate-recipe-path.sh "${requested}")"
           printf 'path=%s\n' "${validated}" >> "${GITHUB_OUTPUT}"
 

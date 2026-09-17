@@ -80,7 +80,7 @@ Mutating administrative commands require access to root-owned gateway state. Unt
 
 ## Live RX integration recipes
 
-Trusted gateway integration policy is checked in under [`recipes/`](recipes/). The default self-hosted CI program is [`recipes/ubuntu22-live.rx`](recipes/ubuntu22-live.rx), which is executed directly with `gway recipe` and exercises GWAY self-upgrade/reload before refreshing and validating the live Wire/Web stack.
+Trusted gateway integration policy is checked in under [`recipes/`](recipes/). The default self-hosted CI program is [`recipes/arthexis-watchtower.rx`](recipes/arthexis-watchtower.rx), which is executed directly with `gway recipe` and exercises GWAY self-upgrade/reload before refreshing and validating the live Wire/Web stack.
 
 Manual live workflow runs may select another recipe, but the selector only accepts Git-tracked `.rx` files under `recipes/`; it is not an arbitrary command input. See [docs/recipes.md](docs/recipes.md) for the runner contract, local invocation, trust boundary, and the checks intentionally kept outside the recipe language.
 
